@@ -1,0 +1,140 @@
+name: UAT Verify
+
+on:
+  pull_request:
+    paths:
+      - 'docs/api/openapi.json'
+      - 'audit/uat_public.txt'
+      - 'scripts/**'
+  workflow_dispatch:
+    inputs:
+      run_smoke_test:
+        description: 'Run smoke test (requires app start)'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  RELEASE_STATE: uat
+
+jobs:
+  verify-uat:
+    runs-on: ubuntu-latest
+    name: UAT Verification Suite
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Need full history for merge-base
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: UAT Preflight Check
+      run: npm run -s preflight:uat
+      env:
+        RELEASE_STATE: uat
+    
+    - name: Verify UAT allowlist integrity
+      run: |
+        if [ ! -f "audit/uat_public.txt" ]; then
+          echo "❌ UAT allowlist missing"
+          exit 1
+        fi
+        
+        ALLOWLIST_COUNT=$(wc -l < audit/uat_public.txt)
+        echo "UAT allowlist contains $ALLOWLIST_COUNT endpoints:"
+        cat audit/uat_public.txt
+        
+        if [ "$ALLOWLIST_COUNT" -gt 3 ]; then
+          echo "❌ UAT allowlist exceeds 3 endpoint limit"
+          exit 1
+        fi
+        
+        echo "✅ UAT allowlist verified ($ALLOWLIST_COUNT/3)"
+    
+    - name: Check OpenAPI UAT compliance
+      run: |
+        # Count current public endpoints
+        PUBLIC_COUNT=$(jq '[.paths | to_entries[] | .value | to_entries[] | .value | select(.["x-visibility"] == "public")] | length' docs/api/openapi.json)
+        
+        # Should be 0 in normal state (parked) or match allowlist when promoted
+        if [ "$PUBLIC_COUNT" -gt 3 ]; then
+          echo "❌ Too many public endpoints: $PUBLIC_COUNT > 3"
+          exit 1
+        fi
+        
+        echo "✅ OpenAPI UAT compliance: $PUBLIC_COUNT public endpoints"
+    
+    - name: Validate UAT promotion capability
+      run: |
+        # Test promotion without committing
+        cp docs/api/openapi.json docs/api/openapi.backup.json
+        
+        echo "Testing UAT promotion..."
+        npm run promote:uat
+        
+        # Verify promotion worked correctly
+        RELEASE_STATE=uat npm run parked-guard
+        
+        # Restore original state
+        mv docs/api/openapi.backup.json docs/api/openapi.json
+        echo "✅ UAT promotion test completed"
+    
+    - name: UAT Smoke Test (Optional)
+      if: github.event.inputs.run_smoke_test == 'true'
+      run: |
+        echo "Starting application for smoke test..."
+        npm start &
+        APP_PID=$!
+        
+        # Wait for app to start
+        sleep 10
+        
+        # Generate UAT JWT token
+        export JWT_TOKEN=$(npm run -s mint:uat-jwt)
+        
+        # Run smoke test with JUnit output
+        UAT_BASE=http://localhost:3000 npm run smoke:uat-junit
+        
+        # Clean up
+        kill $APP_PID || true
+      timeout-minutes: 5
+    
+    - name: Upload UAT Smoke Results
+      if: github.event.inputs.run_smoke_test == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: uat-smoke-results
+        path: uat-smoke.junit.xml
+        retention-days: 30
+    
+    - name: Security scan
+      run: npm audit --audit-level moderate
+      continue-on-error: true
+    
+    - name: UAT Summary Report
+      run: |
+        echo "## 🎯 UAT Verification Summary" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ UAT preflight checks passed" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Allowlist verified ($(wc -l < audit/uat_public.txt)/3 endpoints)" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ OpenAPI compliance confirmed" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Promotion capability validated" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ github.event.inputs.run_smoke_test }}" == "true" ]; then
+          echo "- ✅ Smoke test completed" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- ⚪ Smoke test skipped" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**UAT Allowlist:**" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        cat audit/uat_public.txt >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,73 @@
+name: API Contract Testing
+on:
+  pull_request:
+    paths:
+      - 'src/app/api/**'
+      - 'docs/api/openapi.json'
+  push:
+    branches: [main]
+
+jobs:
+  contract-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Build application
+        run: npm run build
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          
+      - name: Start API server
+        run: npm run start &
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          PORT: 4000
+          
+      - name: Wait for server
+        run: npx wait-on http://localhost:4000/api/drivers --timeout 30000
+        
+      - name: Run contract tests
+        run: |
+          # Test each endpoint against OpenAPI schema
+          echo "Testing GET /api/drivers"
+          curl -s "http://localhost:4000/api/drivers" | npx prism mock docs/api/openapi.json --validate-request --validate-response --errors
+          
+          echo "Testing driver update schema validation"
+          curl -s -X PATCH "http://localhost:4000/api/drivers/test-id" \
+            -H "Content-Type: application/json" \
+            -d '{"status": "active", "phone": "+639171234567"}' | \
+            npx prism mock docs/api/openapi.json --validate-request --validate-response --errors
+            
+        continue-on-error: false
+        
+      - name: Upload contract test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-test-results
+          path: |
+            contract-test-*.json
+            prism-validation-*.log

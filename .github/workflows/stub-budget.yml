@@ -1,0 +1,14 @@
+name: Stub Budget
+on:
+  pull_request:
+    paths: ['docs/api/openapi.json']
+jobs:
+  budget:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce Stub Budget
+        run: |
+          npm run -s stubs:budget
+          echo "Current:" $(cat audit/stub_count.txt)
+          echo "Max:" $(cat audit/stub_budget.max)

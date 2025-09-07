@@ -1,0 +1,30 @@
+name: OpenAPI Quality
+on:
+  pull_request:
+    paths: ['docs/api/openapi.json','audit/drift-ignore.txt','scripts/**']
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need history for schema compatibility
+      - name: Drift (with ignore)
+        run: |
+          node ./scripts/drift-check.mjs || true
+          node ./scripts/drift-filter.mjs
+          if [ -s audit/missing_in_docs.txt ]; then
+            echo "::error::Route drift remains after ignore. See audit/missing_in_docs.txt"
+            cat audit/missing_in_docs.txt
+            exit 1
+          fi
+      - name: Public API guard
+        run: node ./scripts/public-openapi-guard.mjs
+      - name: Public schema compatibility
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          if git cat-file -e "${BASE_SHA}:docs/api/openapi.json" 2>/dev/null; then
+            node ./scripts/public-schema-compat.mjs "${BASE_SHA}"
+          else
+            echo "Base OpenAPI spec not found, skipping compatibility check"
+          fi

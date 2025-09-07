@@ -1,0 +1,158 @@
+name: Deploy UAT
+
+on:
+  workflow_dispatch:
+    inputs:
+      promote_endpoints:
+        description: 'Promote endpoints to public for UAT testing'
+        required: false
+        default: 'false'
+        type: boolean
+  push:
+    branches: [ release/uat ]
+
+env:
+  RELEASE_STATE: uat
+
+jobs:
+  uat-validation:
+    runs-on: ubuntu-latest
+    name: UAT Environment Validation
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Check drift detection
+      run: |
+        npm run -s guard:drift || true
+        node scripts/drift-filter.mjs
+    
+    - name: Run UAT Environment Guard
+      run: RELEASE_STATE=uat npm run parked-guard
+      env:
+        RELEASE_STATE: uat
+    
+    - name: Validate public API schema compatibility
+      run: npm run -s guard:public-openapi
+    
+    - name: Run schema compatibility check
+      run: |
+        if [ -n "${{ github.event.before }}" ]; then
+          node scripts/public-schema-compat.mjs ${{ github.event.before }}
+        else
+          echo "Skipping schema compatibility check (no previous commit)"
+        fi
+    
+    - name: Contract testing
+      run: npm run -s contract:test
+      timeout-minutes: 5
+    
+    - name: Verify UAT allowlist
+      run: |
+        echo "UAT allowed public endpoints:"
+        cat audit/uat_public.txt
+        
+        ALLOWED_COUNT=$(wc -l < audit/uat_public.txt)
+        PUBLIC_COUNT=$(jq '[.paths | to_entries[] | .value | to_entries[] | .value | select(.["x-visibility"] == "public")] | length' docs/api/openapi.json)
+        
+        if [ "$PUBLIC_COUNT" -gt "$ALLOWED_COUNT" ]; then
+          echo "🚨 More public endpoints ($PUBLIC_COUNT) than allowed ($ALLOWED_COUNT)"
+          exit 1
+        fi
+        
+        echo "✅ UAT endpoint governance validated"
+
+  uat-build:
+    runs-on: ubuntu-latest
+    name: Build UAT Release Candidate
+    needs: uat-validation
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Build application
+      run: npm run build
+      env:
+        NODE_ENV: production
+        RELEASE_STATE: uat
+    
+    - name: Run security scan
+      run: npm audit --audit-level moderate
+      continue-on-error: true
+    
+    - name: Build UAT Docker image
+      run: |
+        docker build -t your-registry/ops-tower:uat-${{ github.sha }} \
+          --build-arg NODE_ENV=production \
+          --build-arg RELEASE_STATE=uat \
+          .
+    
+    - name: UAT deployment readiness check
+      run: |
+        echo "🎯 UAT Release Candidate Built"
+        echo "Image: your-registry/ops-tower:uat-${{ github.sha }}"
+        echo "Environment: UAT"
+        echo "Public endpoints: $(jq '[.paths | to_entries[] | .value | to_entries[] | .value | select(.["x-visibility"] == "public")] | length' docs/api/openapi.json)"
+        echo "Ready for UAT deployment"
+
+  promote-for-uat:
+    runs-on: ubuntu-latest
+    name: Promote Endpoints for UAT Testing
+    needs: uat-build
+    if: github.event.inputs.promote_endpoints == 'true'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Promote UAT endpoints
+      run: |
+        echo "Promoting UAT endpoints to public..."
+        node scripts/promote-public.mjs audit/uat_public.txt
+    
+    - name: Verify promotion
+      run: |
+        RELEASE_STATE=uat npm run parked-guard
+        npm run -s guard:public-openapi
+        echo "✅ UAT endpoints promoted and validated"
+    
+    - name: Commit promoted endpoints
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add docs/api/openapi.json
+        git commit -m "🎯 Promote UAT endpoints for testing
+        
+        Promoted endpoints:
+        $(cat audit/uat_public.txt)
+        
+        🤖 Generated with Claude Code
+        
+        Co-Authored-By: Claude <noreply@anthropic.com>"
+        git push

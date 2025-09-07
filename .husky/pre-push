@@ -1,0 +1,20 @@
+#!/usr/bin/env sh
+echo "=€ Running pre-push checks..."
+
+# Run full test suite
+echo ">ê Running full test suite..."
+npm run test:unit -- --passWithNoTests
+
+# Run integration tests
+echo "= Running integration tests..."
+npm run test:integration -- --passWithNoTests
+
+# Run security scan
+echo "= Running security scan..."
+npm run test:security
+
+# Run build check
+echo "<× Running build check..."
+npm run build
+
+echo " Pre-push checks completed!"

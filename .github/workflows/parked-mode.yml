@@ -1,0 +1,84 @@
+name: Parked Mode CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  RELEASE_STATE: parked
+
+jobs:
+  parked-guard:
+    runs-on: ubuntu-latest
+    name: Block Production Exposure
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run Parked Guard
+      run: ./scripts/parked-guard.mjs
+      env:
+        RELEASE_STATE: parked
+    
+    - name: Verify No Public Endpoints
+      run: |
+        PUBLIC_COUNT=$(jq '[.paths | to_entries[] | .value | to_entries[] | .value | select(.["x-visibility"] == "public")] | length' docs/api/openapi.json)
+        if [ "$PUBLIC_COUNT" != "0" ]; then
+          echo "🚨 FAILED: Found $PUBLIC_COUNT public endpoints in parked mode"
+          exit 1
+        fi
+        echo "✅ PASSED: No public endpoints found"
+    
+    - name: Check Release Artifacts
+      run: |
+        if [ -f "audit/public_rc.txt" ]; then
+          echo "✅ Release candidate list preserved"
+          echo "Saved public endpoints:"
+          cat audit/public_rc.txt
+        else
+          echo "⚠️  No release candidate list found"
+        fi
+
+  rehearsal:
+    runs-on: ubuntu-latest
+    name: Nightly Release Rehearsal
+    if: github.event_name == 'schedule'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Simulate Promotion
+      run: |
+        echo "🎭 Rehearsal: Simulating endpoint promotion..."
+        cp docs/api/openapi.json docs/api/openapi.backup.json
+        
+        if [ -f "audit/public_rc.txt" ]; then
+          echo "Would promote these endpoints:"
+          cat audit/public_rc.txt
+        else
+          echo "No endpoints to rehearse"
+        fi
+        
+        # Restore original state
+        mv docs/api/openapi.backup.json docs/api/openapi.json
+        echo "✅ Rehearsal complete, state restored"

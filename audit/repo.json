@@ -1,0 +1,12 @@
+{
+  "repoRoot": "/Users/nathan/Desktop/claude/Projects/ops-tower",
+  "node": "v23.11.0",
+  "rootPackage": "xpress-ops-tower@1.0.0",
+  "workflows": [
+    "ci.yml",
+    "drift-guard.yml",
+    "openapi-version-guard.yml",
+    "performance.yml",
+    "security.yml"
+  ]
+}

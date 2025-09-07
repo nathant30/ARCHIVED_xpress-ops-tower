@@ -64,6 +64,7 @@
     "**/*.stories.ts",
     "**/*.stories.jsx",
     "**/*.stories.js",
-    "apps/**"
+    "apps/**",
+    "packages/**"
   ]
 }

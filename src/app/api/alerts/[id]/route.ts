@@ -13,12 +13,11 @@ import { IncidentStatus } from '@/types';
 
 
 // GET /api/alerts/[id] - Get alert by ID
-export const GET = asyncHandler(async (request: NextRequest, context?: { params: { id: string } }) => {
-  if (!context?.params) {
-    return createApiError('Missing route parameters', 'MISSING_PARAMS', 400);
-  }
-  const { params } = context;
-  const { id } = params;
+export const GET = asyncHandler(async (
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) => {
+  const { id } = await context.params;
   
   const incident = MockDataService.getIncidentById(id);
   

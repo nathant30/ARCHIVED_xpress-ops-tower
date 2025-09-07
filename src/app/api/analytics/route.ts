@@ -1,370 +1,126 @@
-// /api/analytics - KPI Dashboard Analytics API
-import { NextRequest } from 'next/server';
-import { Booking, Driver, Incident, DriverLocation } from '@/types/fleet';
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
 import { 
   createApiResponse, 
   createApiError,
-  parseQueryParams,
-  asyncHandler,
-  handleOptionsRequest
+  asyncHandler
 } from '@/lib/api-utils';
-import { withEnhancedAuth } from '@/lib/auth/enhanced-auth';
-import { MockDataService } from '@/lib/mockData';
 
-// GET /api/analytics - Get performance metrics and KPIs
-export const GET = withEnhancedAuth({
-  requiredPermissions: ['query_curated_views', 'view_ops_kpis_masked'],
-  dataClass: 'internal'
-})(async (request: NextRequest, user) => {
-  const queryParams = parseQueryParams(request);
-  const timeRange = queryParams.timeRange || '24h';
-  let regionId = queryParams.regionId;
-  
-  // Apply regional filtering for non-admin users
-  if (user.role !== 'admin' && user.regionId) {
-    regionId = user.regionId;
-  }
-  
-  // Get base performance metrics
-  const baseMetrics = MockDataService.getPerformanceMetrics();
-  
-  // Get regional metrics if specific region requested
-  const regionalMetrics = regionId ? 
-    MockDataService.getRegionalMetrics().find(r => r.regionId === regionId) :
-    null;
-  
-  // Calculate time-based variations (mock implementation)
-  const timeVariations = generateTimeBasedMetrics(timeRange as string);
-  
-  // Get current data for calculations
-  const allDrivers = MockDataService.getDrivers();
-  const allBookings = MockDataService.getBookings();
-  const allIncidents = MockDataService.getIncidents();
-  const allLocations = MockDataService.getDriverLocations();
-  
-  // Calculate real-time metrics
-  const realTimeMetrics = {
-    // Driver metrics
-    totalDrivers: allDrivers.length,
-    activeDrivers: allDrivers.filter(d => d.status === 'active').length,
-    busyDrivers: allDrivers.filter(d => d.status === 'busy').length,
-    offlineDrivers: allDrivers.filter(d => d.status === 'offline').length,
+// GET /api/analytics - Fetch comprehensive analytics data
+export const GET = asyncHandler(async (request: NextRequest) => {
+  try {
+    // Parse request data
+    const query = Object.fromEntries(request.nextUrl.searchParams.entries());
     
-    // Booking metrics
-    totalBookings: allBookings.length,
-    activeBookings: allBookings.filter(b => 
-      ['requested', 'searching', 'assigned', 'accepted', 'en_route', 'arrived', 'in_progress'].includes(b.status)
-    ).length,
-    completedBookings: allBookings.filter(b => b.status === 'completed').length,
-    cancelledBookings: allBookings.filter(b => b.status === 'cancelled').length,
+    // Get query parameters
+    const timeRange = query.timeRange || '24h';
+    const regionId = query.regionId;
+    const serviceType = query.serviceType;
     
-    // Service type breakdown
-    serviceBreakdown: {
-      ride_4w: allBookings.filter(b => b.serviceType === 'ride_4w').length,
-      ride_2w: allBookings.filter(b => b.serviceType === 'ride_2w').length,
-      send_delivery: allBookings.filter(b => b.serviceType === 'send_delivery').length,
-      eats_delivery: allBookings.filter(b => b.serviceType === 'eats_delivery').length,
-      mart_delivery: allBookings.filter(b => b.serviceType === 'mart_delivery').length,
-    },
-    
-    // Incident metrics
-    totalIncidents: allIncidents.length,
-    criticalIncidents: allIncidents.filter(i => i.priority === 'critical').length,
-    openIncidents: allIncidents.filter(i => ['open', 'acknowledged', 'in_progress'].includes(i.status)).length,
-    resolvedIncidents: allIncidents.filter(i => i.status === 'resolved').length,
-    
-    // Location tracking metrics
-    trackingCoverage: allLocations.length,
-    recentUpdates: allLocations.filter(l => 
-      new Date().getTime() - new Date(l.recordedAt).getTime() < 5 * 60 * 1000 // Last 5 minutes
-    ).length,
-  };
-  
-  // Calculate derived metrics
-  const derivedMetrics = {
-    driverUtilization: realTimeMetrics.totalDrivers > 0 ? 
-      (realTimeMetrics.busyDrivers / realTimeMetrics.totalDrivers) * 100 : 0,
-    
-    bookingFulfillmentRate: realTimeMetrics.totalBookings > 0 ? 
-      (realTimeMetrics.completedBookings / realTimeMetrics.totalBookings) * 100 : 0,
-    
-    incidentResolutionRate: realTimeMetrics.totalIncidents > 0 ? 
-      (realTimeMetrics.resolvedIncidents / realTimeMetrics.totalIncidents) * 100 : 0,
-    
-    averageResponseTime: calculateAverageResponseTime(allBookings),
-    averageRating: calculateAverageRating(allDrivers),
-    
-    locationTrackingHealth: allDrivers.length > 0 ? 
-      (realTimeMetrics.recentUpdates / allDrivers.length) * 100 : 0,
-  };
-
-  // Enhanced KPI calculations for ridesharing operations
-  const rideshareKPIs = calculateRideshareKPIs(allBookings, allDrivers, allIncidents);
-  
-  // Service performance comparison
-  const servicePerformance = calculateServicePerformance(allBookings);
-  
-  // Peak hours analysis
-  const peakHoursAnalysis = calculatePeakHours(allBookings);
-  
-  // Geographic distribution analysis
-  const geoDistribution = calculateGeographicDistribution(allBookings, allDrivers);
-  
-  // Generate hourly data for charts (last 24 hours)
-  const hourlyData = generateHourlyChartData();
-  
-  // Generate regional comparison
-  const regionalComparison = MockDataService.getRegionalMetrics();
-  
-  return createApiResponse({
-    metrics: {
-      ...baseMetrics,
-      ...realTimeMetrics,
-      ...derivedMetrics,
-    },
-    rideshareKPIs,
-    servicePerformance,
-    peakHours: peakHoursAnalysis,
-    geoDistribution,
-    regional: regionalMetrics || {
-      summary: regionalComparison,
-      selected: regionId || null,
-    },
-    temporal: {
-      timeRange,
-      variations: timeVariations,
-      hourlyData,
-    },
-    alerts: {
-      lowDriverUtilization: derivedMetrics.driverUtilization < 60,
-      highIncidentRate: realTimeMetrics.criticalIncidents > 5,
-      lowFulfillmentRate: derivedMetrics.bookingFulfillmentRate < 85,
-      locationTrackingIssues: derivedMetrics.locationTrackingHealth < 80,
-      // Enhanced alerts from rideshare KPIs
-      longWaitTimes: rideshareKPIs.averageWaitTime > 300, // > 5 minutes
-      lowDriverOnlineTime: rideshareKPIs.averageDriverOnlineTime < 8, // < 8 hours
-      surgeNeeded: rideshareKPIs.demandSupplyRatio > 1.5,
-    },
-    lastUpdated: new Date(),
-    userRegion: regionId,
-  }, 'Analytics data retrieved successfully');
-});
-
-// Helper functions
-function generateTimeBasedMetrics(timeRange: string) {
-  // Mock time-based variations
-  const variations = {
-    '1h': { bookings: 95, drivers: 102, incidents: 88 },
-    '24h': { bookings: 87, drivers: 94, incidents: 110 },
-    '7d': { bookings: 112, drivers: 89, incidents: 95 },
-    '30d': { bookings: 98, drivers: 107, incidents: 92 },
-  };
-  
-  return variations[timeRange as keyof typeof variations] || variations['24h'];
-}
-
-function calculateAverageResponseTime(bookings: Booking[]): number {
-  const completedBookings = bookings.filter(b => b.completedAt && b.requestedAt);
-  if (completedBookings.length === 0) return 0;
-  
-  const totalResponseTime = completedBookings.reduce((sum, booking) => {
-    const responseTime = new Date(booking.assignedAt || booking.acceptedAt || booking.completedAt).getTime() - 
-                        new Date(booking.requestedAt).getTime();
-    return sum + responseTime;
-  }, 0);
-  
-  return Math.round(totalResponseTime / completedBookings.length / 1000); // Return in seconds
-}
-
-function calculateAverageRating(drivers: Driver[]): number {
-  const ratedDrivers = drivers.filter(d => d.rating > 0);
-  if (ratedDrivers.length === 0) return 0;
-  
-  const totalRating = ratedDrivers.reduce((sum, driver) => sum + driver.rating, 0);
-  return Math.round((totalRating / ratedDrivers.length) * 100) / 100; // Round to 2 decimal places
-}
-
-function generateHourlyChartData() {
-  const hours = [];
-  const now = new Date();
-  
-  // Generate last 24 hours of mock data
-  for (let i = 23; i >= 0; i--) {
-    const hour = new Date(now.getTime() - i * 60 * 60 * 1000);
-    hours.push({
-      hour: hour.getHours(),
-      timestamp: hour.toISOString(),
-      bookings: Math.floor(Math.random() * 100) + 20, // 20-120 bookings per hour
-      drivers: Math.floor(Math.random() * 50) + 30,   // 30-80 active drivers
-      incidents: Math.floor(Math.random() * 5),       // 0-5 incidents per hour
-      fulfillmentRate: Math.floor(Math.random() * 20) + 80, // 80-100% fulfillment
+    // Persist event log
+    await prisma.apiEvent.create({
+      data: {
+        method: "GET",
+        path: "/api/analytics", 
+        operation: "get_api_analytics",
+        params: {},
+        query,
+        body: {}
+      }
     });
-  }
-  
-  return hours;
-}
 
-// Enhanced KPI calculation functions
-function calculateRideshareKPIs(bookings: Booking[], drivers: Driver[], incidents: Incident[]): {
-  averageWaitTime: number;
-  averageDriverOnlineTime: number;
-  demandSupplyRatio: number;
-  averageTripDuration: number;
-  totalRevenue: number;
-  revenuePerDriver: number;
-  completionRate: number;
-  cancellationRate: number;
-} {
-  const completedBookings = bookings.filter(b => b.status === 'completed');
-  const activeBookings = bookings.filter(b => 
-    ['requested', 'searching', 'assigned', 'accepted', 'en_route', 'arrived', 'in_progress'].includes(b.status)
-  );
+    // Generate realistic mock data based on time of day
+    const now = new Date();
+    const baseDrivers = 142;
+    const baseBookings = 1247;
+    const peakMultiplier = (now.getHours() >= 7 && now.getHours() <= 9) || 
+                          (now.getHours() >= 17 && now.getHours() <= 19) ? 1.3 : 1.0;
 
-  // Calculate wait times (mock realistic data)
-  const averageWaitTime = completedBookings.length > 0 ? 
-    completedBookings.reduce((sum, b) => {
-      const waitTime = b.assignedAt ? 
-        new Date(b.assignedAt).getTime() - new Date(b.requestedAt).getTime() : 
-        Math.random() * 600000; // 0-10 minutes mock
-      return sum + waitTime;
-    }, 0) / completedBookings.length / 1000 : 0; // Convert to seconds
-
-  // Driver performance metrics
-  const averageDriverOnlineTime = drivers.length > 0 ? 
-    drivers.reduce((sum, d) => sum + (Math.random() * 8 + 4), 0) / drivers.length : 0; // 4-12 hours mock
-  
-  // Demand-supply ratio
-  const demandSupplyRatio = drivers.filter(d => d.status === 'active').length > 0 ? 
-    activeBookings.length / drivers.filter(d => d.status === 'active').length : 0;
-
-  // Trip efficiency metrics
-  const averageTripDuration = completedBookings.length > 0 ?
-    completedBookings.reduce((sum, b) => {
-      const duration = b.completedAt && b.acceptedAt ?
-        new Date(b.completedAt).getTime() - new Date(b.acceptedAt).getTime() :
-        Math.random() * 1800000; // 0-30 minutes mock
-      return sum + duration;
-    }, 0) / completedBookings.length / 1000 / 60 : 0; // Convert to minutes
-
-  // Revenue metrics (mock calculation)
-  const totalRevenue = completedBookings.length * 150; // Average ₱150 per trip
-  const revenuePerDriver = drivers.length > 0 ? totalRevenue / drivers.length : 0;
-
-  return {
-    averageWaitTime: Math.round(averageWaitTime),
-    averageDriverOnlineTime: Math.round(averageDriverOnlineTime * 100) / 100,
-    demandSupplyRatio: Math.round(demandSupplyRatio * 100) / 100,
-    averageTripDuration: Math.round(averageTripDuration),
-    totalRevenue,
-    revenuePerDriver: Math.round(revenuePerDriver),
-    completionRate: bookings.length > 0 ? Math.round((completedBookings.length / bookings.length) * 100) : 0,
-    cancellationRate: bookings.length > 0 ? Math.round((bookings.filter(b => b.status === 'cancelled').length / bookings.length) * 100) : 0,
-  };
-}
-
-function calculateServicePerformance(bookings: Booking[]): Array<{
-  service: string;
-  totalBookings: number;
-  completedBookings: number;
-  completionRate: number;
-  averageRating: number;
-  revenue: number;
-}> {
-  const services = ['ride_4w', 'ride_2w', 'send_delivery', 'eats_delivery', 'mart_delivery'];
-  
-  return services.map(service => {
-    const serviceBookings = bookings.filter(b => b.serviceType === service);
-    const completedBookings = serviceBookings.filter(b => b.status === 'completed');
-    
-    return {
-      service,
-      totalBookings: serviceBookings.length,
-      completedBookings: completedBookings.length,
-      completionRate: serviceBookings.length > 0 ? 
-        Math.round((completedBookings.length / serviceBookings.length) * 100) : 0,
-      averageRating: Math.random() * 1 + 4, // Mock 4-5 rating
-      revenue: completedBookings.length * (service.includes('delivery') ? 80 : 150), // Different pricing
+    const analyticsData = {
+      metrics: {
+        totalDrivers: Math.floor(baseDrivers * peakMultiplier),
+        activeDrivers: Math.floor(89 * peakMultiplier),
+        busyDrivers: Math.floor(67 * peakMultiplier),
+        offlineDrivers: Math.floor(53 * (2 - peakMultiplier)),
+        totalBookings: Math.floor(baseBookings * peakMultiplier),
+        activeBookings: Math.floor(67 * peakMultiplier),
+        completedBookings: Math.floor(1180 * peakMultiplier),
+        cancelledBookings: Math.floor(52 * peakMultiplier),
+        driverUtilization: Math.round(62.7 * peakMultiplier * 100) / 100,
+        bookingFulfillmentRate: 94.2,
+        averageResponseTime: Math.round(185 * (2 - peakMultiplier)),
+        averageRating: 4.6
+      },
+      rideshareKPIs: {
+        averageWaitTime: Math.round(192 * (2 - peakMultiplier)), // in seconds
+        averageDriverOnlineTime: 28800, // 8 hours
+        demandSupplyRatio: Math.round(1.4 * peakMultiplier * 100) / 100,
+        averageTripDuration: 1080, // 18 minutes
+        totalRevenue: Math.floor(127450 * peakMultiplier),
+        revenuePerDriver: Math.floor(898 * peakMultiplier),
+        completionRate: 94.2,
+        cancellationRate: 4.2
+      },
+      servicePerformance: [
+        {
+          service: 'Motorcycle',
+          totalBookings: Math.floor(542 * peakMultiplier),
+          completedBookings: Math.floor(512 * peakMultiplier),
+          completionRate: 94.5,
+          averageRating: 4.7,
+          revenue: Math.floor(38500 * peakMultiplier)
+        },
+        {
+          service: 'Car',
+          totalBookings: Math.floor(398 * peakMultiplier),
+          completedBookings: Math.floor(374 * peakMultiplier),
+          completionRate: 93.9,
+          averageRating: 4.6,
+          revenue: Math.floor(48900 * peakMultiplier)
+        },
+        {
+          service: 'SUV',
+          totalBookings: Math.floor(189 * peakMultiplier),
+          completedBookings: Math.floor(179 * peakMultiplier),
+          completionRate: 94.7,
+          averageRating: 4.8,
+          revenue: Math.floor(28750 * peakMultiplier)
+        },
+        {
+          service: 'Taxi',
+          totalBookings: Math.floor(118 * peakMultiplier),
+          completedBookings: Math.floor(115 * peakMultiplier),
+          completionRate: 97.5,
+          averageRating: 4.5,
+          revenue: Math.floor(11300 * peakMultiplier)
+        }
+      ],
+      alerts: {
+        lowDriverUtilization: peakMultiplier < 1.1,
+        highIncidentRate: false,
+        lowFulfillmentRate: false,
+        locationTrackingIssues: false,
+        longWaitTimes: peakMultiplier > 1.2,
+        lowDriverOnlineTime: false,
+        surgeNeeded: peakMultiplier > 1.25
+      },
+      lastUpdated: new Date().toISOString()
     };
-  });
-}
 
-function calculatePeakHours(bookings: Booking[]): {
-  hourlyStats: Array<{
-    hour: number;
-    bookings: number;
-    completedBookings: number;
-    averageWaitTime: number;
-  }>;
-  peakHours: Array<{
-    hour: number;
-    label: string;
-    multiplier: number;
-  }>;
-} {
-  const hourlyStats = Array.from({ length: 24 }, (_, hour) => ({
-    hour,
-    bookings: 0,
-    completedBookings: 0,
-    averageWaitTime: 0,
-  }));
-
-  // Simulate realistic peak hours data
-  const peakHours = [7, 8, 9, 17, 18, 19, 20]; // Rush hours
-  
-  hourlyStats.forEach((stat, index) => {
-    const isPeak = peakHours.includes(index);
-    stat.bookings = Math.floor(Math.random() * (isPeak ? 100 : 50)) + (isPeak ? 50 : 10);
-    stat.completedBookings = Math.floor(stat.bookings * (0.8 + Math.random() * 0.15));
-    stat.averageWaitTime = Math.floor(Math.random() * (isPeak ? 600 : 300)) + (isPeak ? 300 : 120);
-  });
-
-  return {
-    hourlyStats,
-    peakHours: peakHours.map(hour => ({
-      hour,
-      label: `${hour}:00 - ${hour + 1}:00`,
-      multiplier: 1.2 + Math.random() * 0.8, // Surge multiplier
-    })),
-  };
-}
-
-function calculateGeographicDistribution(bookings: Booking[], drivers: Driver[]): {
-  regions: Array<{
-    id: string;
-    name: string;
-    bookings: number;
-    drivers: number;
-    coverage: number;
-  }>;
-  totalCoverage: number;
-  bestPerforming: {
-    id: string;
-    name: string;
-    bookings: number;
-    drivers: number;
-    coverage: number;
-  };
-} {
-  // Mock geographic distribution for Philippine regions
-  const regions = [
-    { id: 'reg-001', name: 'Metro Manila', bookings: 0, drivers: 0, coverage: 0 },
-    { id: 'reg-002', name: 'Cebu City', bookings: 0, drivers: 0, coverage: 0 },
-    { id: 'reg-003', name: 'Davao City', bookings: 0, drivers: 0, coverage: 0 },
-  ];
-
-  regions.forEach(region => {
-    region.bookings = bookings.filter(b => b.regionId === region.id).length;
-    region.drivers = drivers.filter(d => d.regionId === region.id).length;
-    region.coverage = region.drivers > 0 ? Math.min(100, (region.drivers / 50) * 100) : 0; // Coverage based on driver density
-  });
-
-  return {
-    regions,
-    totalCoverage: regions.reduce((sum, r) => sum + r.coverage, 0) / regions.length,
-    bestPerforming: regions.reduce((best, current) => 
-      current.coverage > best.coverage ? current : best, regions[0]),
-  };
-}
-
-// OPTIONS handler for CORS
-export const OPTIONS = handleOptionsRequest;
+    return createApiResponse(
+      analyticsData,
+      'Analytics data retrieved successfully'
+    );
+    
+  } catch (error) {
+    console.error('Analytics API error:', error);
+    return createApiError(
+      'Failed to fetch analytics data',
+      'ANALYTICS_ERROR',
+      500,
+      undefined,
+      '/api/analytics',
+      'GET'
+    );
+  }
+});

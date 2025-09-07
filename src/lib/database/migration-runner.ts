@@ -733,7 +733,7 @@ export async function runMigrationsCLI(): Promise<void> {
       case 'up':
         const targetVersion = args.find(arg => arg.startsWith('--to='))?.split('=')[1];
         const results = await runner.runMigrations(targetVersion);
-        .length} migrations successfully`);
+        console.log(`✅ Applied ${results.length} migrations successfully`);
         break;
         
       case 'down':

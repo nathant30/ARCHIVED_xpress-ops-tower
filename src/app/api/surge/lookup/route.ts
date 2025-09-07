@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SurgeLookupRequest, SurgeLookupResponse, ServiceKey } from '@/lib/pricing/surgeSchemas';
 import { getDatabase } from '@/lib/database';
-import { h3ToParent, getResolution } from 'h3-js';
+import { cellToParent, getResolution } from 'h3-js';
 
 export async function POST(request: NextRequest) {
   try {
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
 
       // Move to parent hex if no state found
       if (currentRes > 6) {
-        currentH3 = h3ToParent(currentH3, currentRes - 1);
+        currentH3 = cellToParent(currentH3, currentRes - 1);
         currentRes = currentRes - 1;
       } else {
         break;

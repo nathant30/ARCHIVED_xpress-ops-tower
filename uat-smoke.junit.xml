@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="uat-smoke" 
+           tests="1" 
+           failures="0" 
+           errors="0" 
+           time="0"
+           timestamp="2025-09-07T15:46:15+08:00">
+  <testcase classname="uat.smoke" 
+            name="endpoint-validation" 
+            time="0">
+    
+  </testcase>
+  <system-out>
+    <![CDATA[UAT smoke test executed with status: 0]]>
+  </system-out>
+</testsuite>

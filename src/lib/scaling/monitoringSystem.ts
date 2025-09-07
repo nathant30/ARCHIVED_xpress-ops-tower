@@ -438,21 +438,23 @@ class MonitoringSystem extends EventEmitter {
 
   private async sendEmailNotification(channel: NotificationChannel, alert: Alert): Promise<void> {
     // In a real implementation, this would integrate with an email service
-    }: ${alert.message}`);
+    console.log(`Email notification to ${channel.config.to}: ${alert.message}`);
   }
 
   private async sendSlackNotification(channel: NotificationChannel, alert: Alert): Promise<void> {
     // In a real implementation, this would send to Slack webhook
     const emoji = alert.severity === 'critical' ? '🚨' : alert.severity === 'high' ? '⚠️' : '📊';
-    }
+    console.log(`Slack notification ${emoji}: ${alert.message}`);
+  }
 
   private async sendWebhookNotification(channel: NotificationChannel, alert: Alert): Promise<void> {
     // In a real implementation, this would make HTTP POST to webhook URL
-    }
+    console.log(`Webhook notification to ${channel.config.url}: ${alert.message}`);
+  }
 
   private async sendSMSNotification(channel: NotificationChannel, alert: Alert): Promise<void> {
     // In a real implementation, this would integrate with SMS service
-    }: ${alert.message}`);
+    console.log(`SMS notification to ${channel.config.phone}: ${alert.message}`);
   }
 
   start(): void {

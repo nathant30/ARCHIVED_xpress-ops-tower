@@ -448,7 +448,7 @@ function getPerformanceTrends() {
   };
 }
 
-function getTestSampleSize(testId: string) {
+function getTestSampleSize(_testId: string) {
   // Simulate sample sizes
   return Math.floor(Math.random() * 20000) + 5000;
 }

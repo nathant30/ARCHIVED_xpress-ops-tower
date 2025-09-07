@@ -1,0 +1,65 @@
+generator client { 
+  provider = "prisma-client-js" 
+}
+
+datasource db { 
+  provider = "sqlite"
+  url = "file:./dev.db" 
+}
+
+model Driver {
+  id        String  @id @default(uuid())
+  name      String
+  phone     String  
+  email     String  @unique
+  status    String  @default("active")
+  rating    Float   @default(0.0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  regionAssignments RegionAssignment[]
+}
+
+model Region {
+  id        String  @id @default(uuid())
+  name      String  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  assignments RegionAssignment[]
+}
+
+model RegionAssignment {
+  id        String  @id @default(uuid())
+  regionId  String
+  driverId  String
+  assignedBy String
+  createdAt DateTime @default(now())
+  
+  region Region @relation(fields: [regionId], references: [id])
+  driver Driver @relation(fields: [driverId], references: [id])
+  
+  @@index([regionId, driverId])
+}
+
+model RideRequest {
+  id          String  @id @default(uuid())
+  passengerId String
+  pickup      String
+  dropoff     String
+  status      String  @default("pending")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+model ApiEvent {
+  id         String   @id @default(uuid())
+  method     String
+  path       String
+  operation  String?
+  params     Json?
+  query      Json?
+  body       Json?
+  createdAt  DateTime @default(now())
+
+  @@index([method, path, createdAt])
+}

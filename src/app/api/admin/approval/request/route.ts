@@ -4,8 +4,6 @@ import {
   createApiResponse, 
   createApiError,
   createValidationError,
-  validateRequiredFields,
-  asyncHandler,
   handleOptionsRequest
 } from '@/lib/api-utils';
 import { withRBAC, type AuthenticatedRequest } from '@/middleware/rbacMiddleware';
@@ -77,7 +75,7 @@ async function createApprovalRequestInDb(
   requesterId: string,
   justification: string,
   requestedAction: Record<string, unknown>,
-  ttlHours?: number
+  _ttlHours?: number
 ): Promise<ApprovalRequest> {
   const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   const now = new Date().toISOString();
@@ -118,8 +116,20 @@ export const POST = withRBAC(async (request: AuthenticatedRequest) => {
   
   const clientIP = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
 
-  // Validate required fields
-  const validationErrors = validateRequiredFields(body, ['action', 'justification', 'requested_action']);
+  // Validate required fields manually
+  const validationErrors: Array<{ field: string; message: string; code: string }> = [];
+  
+  if (!body.action || typeof body.action !== 'string') {
+    validationErrors.push({ field: 'action', message: 'Action is required and must be a string', code: 'REQUIRED_FIELD' });
+  }
+  
+  if (!body.justification || typeof body.justification !== 'string') {
+    validationErrors.push({ field: 'justification', message: 'Justification is required and must be a string', code: 'REQUIRED_FIELD' });
+  }
+  
+  if (!body.requested_action || typeof body.requested_action !== 'object') {
+    validationErrors.push({ field: 'requested_action', message: 'Requested action is required and must be an object', code: 'REQUIRED_FIELD' });
+  }
   
   if (validationErrors.length > 0) {
     return createValidationError(validationErrors, '/api/admin/approval/request', 'POST');
@@ -187,7 +197,6 @@ export const POST = withRBAC(async (request: AuthenticatedRequest) => {
         userId: user.user_id, 
         resource: 'approval_request', 
         action: 'create', 
-        resourceId: approvalRequest.request_id,
         ipAddress: clientIP 
       }
     );
@@ -305,8 +314,6 @@ export const GET = withRBAC(async (request: AuthenticatedRequest) => {
     );
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to retrieve workflows';
-    
     secureLog.error('Workflow retrieval error:', error);
     
     return createApiError(

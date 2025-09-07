@@ -24,7 +24,9 @@
       "get": {
         "summary": "Get drivers list",
         "description": "Retrieve a paginated list of drivers with filtering options",
-        "tags": ["Drivers"],
+        "tags": [
+          "Drivers"
+        ],
         "parameters": [
           {
             "name": "page",
@@ -56,28 +58,21 @@
             "required": false,
             "schema": {
               "type": "string",
-              "enum": ["active", "inactive", "suspended"]
+              "enum": [
+                "active",
+                "inactive",
+                "suspended"
+              ]
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "List of drivers",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/Driver"
-                      }
-                    },
-                    "pagination": {
-                      "$ref": "#/components/schemas/Pagination"
-                    }
-                  }
+                  "$ref": "#/components/schemas/DriversGetResponse"
                 }
               }
             }
@@ -102,14 +97,22 @@
             "description": "Not Found"
           }
         },
-        "operationId": "get_Drivers"
+        "operationId": "get_Drivers",
+        "x-visibility": "internal",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/api/drivers/{id}": {
       "patch": {
         "summary": "Update driver information",
         "description": "Update specific fields of a driver record",
-        "tags": ["Drivers"],
+        "tags": [
+          "Drivers"
+        ],
         "parameters": [
           {
             "name": "id",
@@ -131,7 +134,11 @@
                 "properties": {
                   "status": {
                     "type": "string",
-                    "enum": ["active", "inactive", "suspended"]
+                    "enum": [
+                      "active",
+                      "inactive",
+                      "suspended"
+                    ]
                   },
                   "phone": {
                     "type": "string",
@@ -183,7 +190,9 @@
       "post": {
         "summary": "Assign Regional Manager",
         "description": "Assign a Regional Manager to a specific region",
-        "tags": ["Regions"],
+        "tags": [
+          "Regions"
+        ],
         "parameters": [
           {
             "name": "id",
@@ -202,7 +211,9 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["userId"],
+                "required": [
+                  "userId"
+                ],
                 "properties": {
                   "userId": {
                     "type": "string",
@@ -286,18 +297,29 @@
       "post": {
         "summary": "Request a ride",
         "description": "Submit a new ride request",
-        "tags": ["Rides"],
+        "tags": [
+          "Rides",
+          "UAT"
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["pickup", "destination", "serviceType"],
+                "required": [
+                  "pickup",
+                  "destination",
+                  "serviceType"
+                ],
                 "properties": {
                   "pickup": {
                     "type": "object",
-                    "required": ["lat", "lng", "address"],
+                    "required": [
+                      "lat",
+                      "lng",
+                      "address"
+                    ],
                     "properties": {
                       "lat": {
                         "type": "number",
@@ -316,7 +338,11 @@
                   },
                   "destination": {
                     "type": "object",
-                    "required": ["lat", "lng", "address"],
+                    "required": [
+                      "lat",
+                      "lng",
+                      "address"
+                    ],
                     "properties": {
                       "lat": {
                         "type": "number"
@@ -331,7 +357,11 @@
                   },
                   "serviceType": {
                     "type": "string",
-                    "enum": ["standard", "premium", "shared"]
+                    "enum": [
+                      "standard",
+                      "premium",
+                      "shared"
+                    ]
                   },
                   "scheduledTime": {
                     "type": "string",
@@ -355,34 +385,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GenericObject"
+                  "$ref": "#/components/schemas/RidesRequestPostResponse"
                 }
               }
             }
           },
           "201": {
-            "description": "Ride request created successfully",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "rideId": {
-                      "type": "string",
-                      "format": "uuid"
-                    },
-                    "estimatedFare": {
-                      "type": "number"
-                    },
-                    "estimatedArrival": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "status": {
-                      "type": "string",
-                      "enum": ["pending", "searching", "matched"]
-                    }
-                  }
+                  "$ref": "#/components/schemas/RidesRequestPostResponse"
                 }
               }
             }
@@ -407,7 +420,2539 @@
             "description": "Not Found"
           }
         },
-        "operationId": "post_RidesRequest"
+        "operationId": "post_RidesRequest",
+        "x-visibility": "internal",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-uat-approved": true,
+        "x-promoted-at": "2025-09-07T07:19:08.091Z",
+        "x-parked-at": "2025-09-07T07:36:53.283Z"
+      }
+    },
+    "/api/alerts": {
+      "get": {
+        "summary": "(Frontend-called) GET /api/alerts",
+        "description": "Route called by frontend - needs backend implementation",
+        "tags": [
+          "Alerts"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertsGetResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        },
+        "operationId": "get_api_alerts",
+        "x-status": "baseline",
+        "x-visibility": "internal",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/analytics": {
+      "get": {
+        "summary": "(Frontend-called) GET /api/analytics",
+        "description": "Route called by frontend - needs backend implementation",
+        "tags": [
+          "Analytics",
+          "UAT"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsGetResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        },
+        "operationId": "get_api_analytics",
+        "x-status": "baseline",
+        "x-visibility": "internal",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-uat-approved": true,
+        "x-promoted-at": "2025-09-07T07:19:08.092Z",
+        "x-parked-at": "2025-09-07T07:37:46.228Z"
+      }
+    },
+    "/api/auth/mfa/challenge": {
+      "get": {
+        "summary": "(Frontend-called) GET /api/auth/mfa/challenge",
+        "description": "Route called by frontend - needs backend implementation",
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        },
+        "operationId": "get_api_auth_mfa_challenge",
+        "x-status": "baseline"
+      }
+    },
+    "/api/auth/mfa/verify": {
+      "get": {
+        "summary": "(Frontend-called) GET /api/auth/mfa/verify",
+        "description": "Route called by frontend - needs backend implementation",
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        },
+        "operationId": "get_api_auth_mfa_verify",
+        "x-status": "baseline"
+      }
+    },
+    "/api/bookings": {
+      "get": {
+        "summary": "(Frontend-called) GET /api/bookings",
+        "description": "Route called by frontend - needs backend implementation",
+        "tags": [
+          "Bookings",
+          "UAT"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookingsGetResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        },
+        "operationId": "get_api_bookings",
+        "x-status": "baseline",
+        "x-visibility": "internal",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-uat-approved": true,
+        "x-promoted-at": "2025-09-07T07:19:08.092Z",
+        "x-parked-at": "2025-09-07T07:37:46.228Z"
+      }
+    },
+    "/api/metrics": {
+      "get": {
+        "summary": "(Frontend-called) GET /api/metrics",
+        "description": "Route called by frontend - needs backend implementation",
+        "tags": [
+          "Metrics"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricsGetResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        },
+        "operationId": "get_api_metrics",
+        "x-status": "baseline",
+        "x-visibility": "internal",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/pricing/events": {
+      "get": {
+        "summary": "(Frontend-called) GET /api/pricing/events",
+        "description": "Route called by frontend - needs backend implementation",
+        "tags": [
+          "Pricing"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        },
+        "operationId": "get_api_pricing_events",
+        "x-status": "baseline"
+      }
+    },
+    "/api/pricing/profiles": {
+      "get": {
+        "summary": "(Frontend-called) GET /api/pricing/profiles",
+        "description": "Route called by frontend - needs backend implementation",
+        "tags": [
+          "Pricing"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PricingProfilesGetResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        },
+        "operationId": "get_api_pricing_profiles",
+        "x-status": "baseline",
+        "x-visibility": "internal",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/pricing/taxi-fares": {
+      "get": {
+        "summary": "(Frontend-called) GET /api/pricing/taxi-fares",
+        "description": "Route called by frontend - needs backend implementation",
+        "tags": [
+          "Pricing"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PricingTaxiFaresGetResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        },
+        "operationId": "get_api_pricing_taxifares",
+        "x-status": "baseline",
+        "x-visibility": "internal",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/pricing/tnvs-fares": {
+      "get": {
+        "summary": "(Frontend-called) GET /api/pricing/tnvs-fares",
+        "description": "Route called by frontend - needs backend implementation",
+        "tags": [
+          "Pricing"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PricingTnvsFaresGetResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        },
+        "operationId": "get_api_pricing_tnvsfares",
+        "x-status": "baseline",
+        "x-visibility": "internal",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/pricing/tolls": {
+      "get": {
+        "summary": "(Frontend-called) GET /api/pricing/tolls",
+        "description": "Route called by frontend - needs backend implementation",
+        "tags": [
+          "Pricing"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        },
+        "operationId": "get_api_pricing_tolls",
+        "x-status": "baseline"
+      }
+    },
+    "/api/admin/users/{id}/overrides": {
+      "delete": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "delete_api_admin_users_id_overrides",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_admin_users_id_overrides",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fraud/training-data": {
+      "delete": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "delete_api_fraud_training-data",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_fraud_training-data",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_fraud_training-data",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "put_api_fraud_training-data",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/monitoring/alerts/{id}": {
+      "delete": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "delete_api_monitoring_alerts_id",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_monitoring_alerts_id",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "put_api_monitoring_alerts_id",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pois/{id}": {
+      "delete": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "delete_api_pois_id",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_pois_id",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "put_api_pois_id",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pricing/tolls/{id}": {
+      "delete": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "delete_api_pricing_tolls_id",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "put_api_pricing_tolls_id",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rbac/roles/{id}": {
+      "delete": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "delete_api_rbac_roles_id",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_rbac_roles_id",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "put_api_rbac_roles_id",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rbac/roles/{id}/users": {
+      "delete": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "delete_api_rbac_roles_id_users",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_rbac_roles_id_users",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_rbac_roles_id_users",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/surge/profiles/{id}": {
+      "delete": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "delete_api_surge_profiles_id",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_surge_profiles_id",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "put_api_surge_profiles_id",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/test/create-driver": {
+      "delete": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "delete_api_test_create-driver",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_test_create-driver",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/test/create-operator": {
+      "delete": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "delete_api_test_create-operator",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_test_create-operator",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/test/setup-region": {
+      "delete": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "delete_api_test_setup-region",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_test_setup-region",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/zones/{id}": {
+      "delete": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "delete_api_zones_id",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_zones_id",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "put_api_zones_id",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{id}/regions": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_admin_users_id_regions",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "put_api_admin_users_id_regions",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/status": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_ai_status",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_ai_status",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/compliance": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_compliance",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_compliance",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fraud/check": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_fraud_check",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_fraud_check",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/location/real-time": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_location_real-time",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_location_real-time",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/metrics": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_mobile_metrics",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/monitoring/alerts": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_monitoring_alerts",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_monitoring_alerts",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/monitoring/dashboard": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_monitoring_dashboard",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/monitoring/health": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_monitoring_health",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/monitoring/metrics": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_monitoring_metrics",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_monitoring_metrics",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pois": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_pois",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_pois",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pricing/emergency-flag": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_pricing_emergency-flag",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "patch_api_pricing_emergency-flag",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pricing/profiles/{id}": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_pricing_profiles_id",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "patch_api_pricing_profiles_id",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pricing/profiles/{id}/audit": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_pricing_profiles_id_audit",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_pricing_profiles_id_audit",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pricing/simulations": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_pricing_simulations",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_pricing_simulations",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pricing/simulations/{id}/results": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_pricing_simulations_id_results",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_pricing_simulations_id_results",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pricing/zone-pairs": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_pricing_zone-pairs",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_pricing_zone-pairs",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "put_api_pricing_zone-pairs",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rbac/roles/public": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_rbac_roles_public",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rbac/roles/{id}/versions": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_rbac_roles_id_versions",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/regions-analytics/analytics": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_regions-analytics_analytics",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/status": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_status",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "head": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "head_api_status",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_status",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/surge/audit": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_surge_audit",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_surge_audit",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/surge/heatmap": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_surge_heatmap",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_surge_heatmap",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/surge/hex-state": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_surge_hex-state",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_surge_hex-state",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/surge/overrides": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_surge_overrides",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_surge_overrides",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/surge/schedules": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_surge_schedules",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_surge_schedules",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/surge/signals": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_surge_signals",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_surge_signals",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/surge/status": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_surge_status",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/test/cleanup": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_test_cleanup",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_test_cleanup",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/test/health": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_test_health",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pricing": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_v1_pricing",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pricing/dashboard": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_v1_pricing_dashboard",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pricing/profiles/{id}/compliance": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_v1_pricing_profiles_id_compliance",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/websocket": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_websocket",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_websocket",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/zones": {
+      "get": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "get_api_zones",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_zones",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rbac/roles": {
+      "options": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "options_api_rbac_roles",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pricing/activation-requests/{id}/approve": {
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_pricing_activation-requests_id_approve",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pricing/profiles/{id}/activate": {
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_pricing_profiles_id_activate",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pricing/profiles/{id}/preview": {
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_pricing_profiles_id_preview",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pricing/profiles/{id}/validate": {
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_pricing_profiles_id_validate",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rbac/roles/{id}/approve": {
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_rbac_roles_id_approve",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rbac/roles/{id}/rollback": {
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_rbac_roles_id_rollback",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/surge/lookup": {
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_surge_lookup",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/surge/profiles/{id}/activate": {
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_surge_profiles_id_activate",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/surge/schedules/{id}/activate": {
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_surge_schedules_id_activate",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/surge/validate": {
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_surge_validate",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pricing/profiles/{id}/preview": {
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_v1_pricing_profiles_id_preview",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/zones/{id}/merge": {
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_zones_id_merge",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/zones/{id}/split": {
+      "post": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "post_api_zones_id_split",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pricing/profiles/{id}/components": {
+      "put": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "put_api_pricing_profiles_id_components",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pricing/profiles/{id}/earnings-policy": {
+      "put": {
+        "summary": "(imported from code-only)",
+        "x-visibility": "internal",
+        "x-status": "baseline",
+        "operationId": "put_api_pricing_profiles_id_earnings-policy",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -415,6 +2960,15 @@
     "schemas": {
       "Driver": {
         "type": "object",
+        "required": [
+          "id",
+          "name",
+          "email",
+          "phone",
+          "status",
+          "rating",
+          "createdAt"
+        ],
         "properties": {
           "id": {
             "type": "string",
@@ -428,11 +2982,16 @@
             "format": "email"
           },
           "phone": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^\\+63[0-9]{10}$"
           },
           "status": {
             "type": "string",
-            "enum": ["active", "inactive", "suspended"]
+            "enum": [
+              "active",
+              "inactive",
+              "suspended"
+            ]
           },
           "rating": {
             "type": "number",
@@ -442,6 +3001,53 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "vehicleInfo": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "motorcycle",
+                  "car",
+                  "suv",
+                  "taxi"
+                ]
+              },
+              "model": {
+                "type": "string"
+              },
+              "plateNumber": {
+                "type": "string",
+                "pattern": "^[A-Z]{3}[0-9]{4}$|^[A-Z]{2}[0-9]{5}$"
+              },
+              "color": {
+                "type": "string"
+              },
+              "year": {
+                "type": "integer",
+                "minimum": 1900,
+                "maximum": 2030
+              }
+            }
+          },
+          "location": {
+            "type": "object",
+            "properties": {
+              "latitude": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90
+              },
+              "longitude": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180
+              },
+              "address": {
+                "type": "string"
+              }
+            }
           }
         }
       },
@@ -490,7 +3096,9 @@
             "type": "string"
           }
         },
-        "required": ["message"]
+        "required": [
+          "message"
+        ]
       },
       "DriversGETRequest": {
         "type": "object",
@@ -503,9 +3111,288 @@
             "additionalProperties": true
           }
         },
-        "required": ["ok"]
+        "required": [
+          "ok"
+        ]
       },
-      "DriversGETResponse": {
+      "RideRequest": {
+        "type": "object",
+        "required": [
+          "pickup",
+          "destination",
+          "serviceType"
+        ],
+        "properties": {
+          "pickup": {
+            "type": "object",
+            "required": [
+              "lat",
+              "lng",
+              "address"
+            ],
+            "properties": {
+              "lat": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90
+              },
+              "lng": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180
+              },
+              "address": {
+                "type": "string"
+              }
+            }
+          },
+          "destination": {
+            "type": "object",
+            "required": [
+              "lat",
+              "lng",
+              "address"
+            ],
+            "properties": {
+              "lat": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90
+              },
+              "lng": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180
+              },
+              "address": {
+                "type": "string"
+              }
+            }
+          },
+          "serviceType": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "premium",
+              "shared",
+              "ride_4w",
+              "ride_2w",
+              "send_delivery"
+            ]
+          },
+          "scheduledTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "passengerCount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8
+          },
+          "specialRequests": {
+            "type": "string"
+          }
+        }
+      },
+      "RideResponse": {
+        "type": "object",
+        "required": [
+          "rideId",
+          "status"
+        ],
+        "properties": {
+          "rideId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "bookingReference": {
+            "type": "string"
+          },
+          "estimatedFare": {
+            "type": "number",
+            "minimum": 0
+          },
+          "estimatedArrival": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "searching",
+              "matched",
+              "assigned",
+              "en_route",
+              "arrived",
+              "in_progress",
+              "completed",
+              "cancelled"
+            ]
+          },
+          "driver": {
+            "$ref": "#/components/schemas/Driver"
+          },
+          "surgeMultiplier": {
+            "type": "number",
+            "minimum": 1
+          }
+        }
+      },
+      "RegionAssignmentRequest": {
+        "type": "object",
+        "required": [
+          "userId"
+        ],
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "regional_manager",
+              "supervisor",
+              "operator"
+            ]
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "RegionAssignmentResponse": {
+        "type": "object",
+        "required": [
+          "success",
+          "assignment"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "assignment": {
+            "type": "object",
+            "required": [
+              "regionId",
+              "userId",
+              "assignedAt"
+            ],
+            "properties": {
+              "regionId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "userId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "assignedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "role": {
+                "type": "string"
+              },
+              "permissions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "DriversListResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Driver"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          },
+          "totalActive": {
+            "type": "integer"
+          },
+          "totalInactive": {
+            "type": "integer"
+          },
+          "averageRating": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 5
+          }
+        }
+      },
+      "DriverUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "inactive",
+              "suspended"
+            ]
+          },
+          "phone": {
+            "type": "string",
+            "pattern": "^\\+63[0-9]{10}$"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "vehicleInfo": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "motorcycle",
+                  "car",
+                  "suv",
+                  "taxi"
+                ]
+              },
+              "model": {
+                "type": "string"
+              },
+              "plateNumber": {
+                "type": "string"
+              },
+              "color": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "AnalyticsGetResponse": {
         "type": "object",
         "properties": {
           "ok": {
@@ -516,9 +3403,9 @@
             "additionalProperties": true
           }
         },
-        "required": ["ok"]
+        "additionalProperties": true
       },
-      "DriversPATCHRequest": {
+      "BookingsGetResponse": {
         "type": "object",
         "properties": {
           "ok": {
@@ -529,9 +3416,9 @@
             "additionalProperties": true
           }
         },
-        "required": ["ok"]
+        "additionalProperties": true
       },
-      "DriversPATCHResponse": {
+      "DriversGetResponse": {
         "type": "object",
         "properties": {
           "ok": {
@@ -542,9 +3429,9 @@
             "additionalProperties": true
           }
         },
-        "required": ["ok"]
+        "additionalProperties": true
       },
-      "RegionsAssignRmPOSTRequest": {
+      "MetricsGetResponse": {
         "type": "object",
         "properties": {
           "ok": {
@@ -555,9 +3442,9 @@
             "additionalProperties": true
           }
         },
-        "required": ["ok"]
+        "additionalProperties": true
       },
-      "RegionsAssignRmPOSTResponse": {
+      "PricingProfilesGetResponse": {
         "type": "object",
         "properties": {
           "ok": {
@@ -568,9 +3455,14 @@
             "additionalProperties": true
           }
         },
-        "required": ["ok"]
+        "additionalProperties": true
       },
-      "RidesRequestPOSTRequest": {
+      "RidesRequestPostRequest": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
+      "RidesRequestPostResponse": {
         "type": "object",
         "properties": {
           "ok": {
@@ -581,9 +3473,9 @@
             "additionalProperties": true
           }
         },
-        "required": ["ok"]
+        "additionalProperties": true
       },
-      "RidesRequestPOSTResponse": {
+      "AlertsGetResponse": {
         "type": "object",
         "properties": {
           "ok": {
@@ -594,7 +3486,33 @@
             "additionalProperties": true
           }
         },
-        "required": ["ok"]
+        "additionalProperties": true
+      },
+      "PricingTaxiFaresGetResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      },
+      "PricingTnvsFaresGetResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
       }
     },
     "securitySchemes": {
@@ -617,6 +3535,11 @@
     {
       "name": "Rides",
       "description": "Ride request and management operations"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
     }
   ]
 }

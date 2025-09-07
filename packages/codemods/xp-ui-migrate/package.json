@@ -1,0 +1,33 @@
+{
+  "name": "@xpress-ops/codemod-xp-ui-migrate",
+  "version": "0.1.0",
+  "description": "Codemod for migrating to Xpress Ops UI design system",
+  "bin": {
+    "xp-ui-migrate": "./bin/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "jest"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "transforms"
+  ],
+  "dependencies": {
+    "jscodeshift": "^0.15.0",
+    "yargs": "^17.0.0",
+    "chalk": "^4.1.2",
+    "glob": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/jscodeshift": "^0.11.0",
+    "@types/node": "^20.0.0",
+    "@types/yargs": "^17.0.0",
+    "jest": "^29.0.0",
+    "typescript": "^5.5.4"
+  },
+  "keywords": ["codemod", "migration", "design-system", "xpress"],
+  "author": "Xpress Ops Team",
+  "license": "MIT"
+}

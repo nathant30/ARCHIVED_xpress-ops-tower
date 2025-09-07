@@ -1,0 +1,4 @@
+GET( /api/drivers
+PATCH( /api/drivers
+POST( /api/regions
+POST( /api/rides/request

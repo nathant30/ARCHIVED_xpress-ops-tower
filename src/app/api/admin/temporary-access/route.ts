@@ -5,9 +5,7 @@ import {
   createApiResponse, 
   createApiError,
   createValidationError,
-  validateRequiredFields,
   parseQueryParams,
-  asyncHandler,
   handleOptionsRequest
 } from '@/lib/api-utils';
 import { withRBAC, type AuthenticatedRequest } from '@/middleware/rbacMiddleware';
@@ -205,12 +203,10 @@ async function createTemporaryAccessTokenInDb(
 }
 
 async function revokeTemporaryAccessTokenInDb(
-  tokenId: string,
-  revokedBy: string,
-  reason?: string
+  _tokenId: string,
+  _revokedBy: string,
+  _reason?: string
 ): Promise<void> {
-  const now = new Date().toISOString();
-  
   // Mock database update - in production, update temporary_access_tokens table
   }
 
@@ -341,8 +337,24 @@ export const POST = withRBAC(async (request: AuthenticatedRequest) => {
   
   const clientIP = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
 
-  // Validate required fields
-  const validationErrors = validateRequiredFields(body, ['user_id', 'permissions', 'ttl_seconds', 'justification']);
+  // Validate required fields manually
+  const validationErrors: Array<{ field: string; message: string; code: string }> = [];
+  
+  if (!body.user_id || typeof body.user_id !== 'string') {
+    validationErrors.push({ field: 'user_id', message: 'User ID is required and must be a string', code: 'REQUIRED_FIELD' });
+  }
+  
+  if (!body.permissions || !Array.isArray(body.permissions)) {
+    validationErrors.push({ field: 'permissions', message: 'Permissions is required and must be an array', code: 'REQUIRED_FIELD' });
+  }
+  
+  if (!body.ttl_seconds || typeof body.ttl_seconds !== 'number') {
+    validationErrors.push({ field: 'ttl_seconds', message: 'TTL seconds is required and must be a number', code: 'REQUIRED_FIELD' });
+  }
+  
+  if (!body.justification || typeof body.justification !== 'string') {
+    validationErrors.push({ field: 'justification', message: 'Justification is required and must be a string', code: 'REQUIRED_FIELD' });
+  }
   
   if (validationErrors.length > 0) {
     return createValidationError(validationErrors, '/api/admin/temporary-access', 'POST');
@@ -429,7 +441,7 @@ export const POST = withRBAC(async (request: AuthenticatedRequest) => {
 
     // Log the temporary access token creation
     await auditLogger.logEvent(
-      AuditEventType.PERMISSION_GRANTED,
+      AuditEventType.CONFIG_CHANGE,
       SecurityLevel.HIGH,
       'SUCCESS',
       { 
@@ -443,7 +455,6 @@ export const POST = withRBAC(async (request: AuthenticatedRequest) => {
         userId: user.user_id, 
         resource: 'temporary_access_token', 
         action: 'create', 
-        resourceId: tempToken.token_id,
         ipAddress: clientIP 
       }
     );
@@ -468,7 +479,7 @@ export const POST = withRBAC(async (request: AuthenticatedRequest) => {
     const errorMessage = error instanceof Error ? error.message : 'Failed to create temporary access token';
     
     await auditLogger.logEvent(
-      AuditEventType.PERMISSION_GRANTED,
+      AuditEventType.CONFIG_CHANGE,
       SecurityLevel.HIGH,
       'FAILURE',
       { error: errorMessage, target_user_id: body.user_id, permissions: body.permissions },
@@ -511,8 +522,12 @@ export const DELETE = withRBAC(async (request: AuthenticatedRequest) => {
   
   const clientIP = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
 
-  // Validate required fields
-  const validationErrors = validateRequiredFields(body, ['token_id']);
+  // Validate required fields manually
+  const validationErrors: Array<{ field: string; message: string; code: string }> = [];
+  
+  if (!body.token_id || typeof body.token_id !== 'string') {
+    validationErrors.push({ field: 'token_id', message: 'Token ID is required and must be a string', code: 'REQUIRED_FIELD' });
+  }
   
   if (validationErrors.length > 0) {
     return createValidationError(validationErrors, '/api/admin/temporary-access', 'DELETE');
@@ -530,7 +545,7 @@ export const DELETE = withRBAC(async (request: AuthenticatedRequest) => {
 
     // Log the temporary access token revocation
     await auditLogger.logEvent(
-      AuditEventType.PERMISSION_REVOKED,
+      AuditEventType.CONFIG_CHANGE,
       SecurityLevel.HIGH,
       'SUCCESS',
       { 
@@ -541,7 +556,6 @@ export const DELETE = withRBAC(async (request: AuthenticatedRequest) => {
         userId: user.user_id, 
         resource: 'temporary_access_token', 
         action: 'revoke', 
-        resourceId: body.token_id,
         ipAddress: clientIP 
       }
     );
@@ -561,11 +575,11 @@ export const DELETE = withRBAC(async (request: AuthenticatedRequest) => {
     const errorMessage = error instanceof Error ? error.message : 'Failed to revoke temporary access token';
     
     await auditLogger.logEvent(
-      AuditEventType.PERMISSION_REVOKED,
+      AuditEventType.CONFIG_CHANGE,
       SecurityLevel.HIGH,
       'FAILURE',
       { error: errorMessage, token_id: body.token_id },
-      { userId: user.user_id, resource: 'temporary_access_token', action: 'revoke', resourceId: body.token_id, ipAddress: clientIP }
+      { userId: user.user_id, resource: 'temporary_access_token', action: 'revoke', ipAddress: clientIP }
     );
 
     secureLog.error('Temporary access token revocation error:', error);

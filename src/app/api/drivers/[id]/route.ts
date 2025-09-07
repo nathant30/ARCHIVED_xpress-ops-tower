@@ -10,7 +10,9 @@ import {
   handleOptionsRequest
 } from '@/lib/api-utils';
 import { withAuthAndRateLimit } from '@/lib/auth';
-import { MockDataService } from '@/lib/mockData';
+import { prisma } from '@/lib/prisma';
+import { validateParams, validateBody } from '@/lib/validate';
+import { DriverParamsSchema, DriverUpdateSchema } from '@/lib/schemas';
 import { UpdateDriverRequest } from '@/types';
 
 
@@ -163,31 +165,51 @@ export const PATCH = asyncHandler(async (request: NextRequest, context?: { param
     return createApiError('Missing route parameters', 'MISSING_PARAMS', 400);
   }
   const { params } = context;
-  const { id } = params;
-  const body = await request.json();
   
-  // Check if driver exists
-  const existingDriver = MockDataService.getDriverById(id);
-  if (!existingDriver) {
-    return createNotFoundError('Driver', `/api/drivers/${id}`, 'PATCH');
+  // Validate path parameters
+  const paramsValidation = validateParams(DriverParamsSchema, params);
+  if (paramsValidation.error) {
+    return paramsValidation.error;
   }
   
-  // Validate primary service if provided
-  if (body.primaryService) {
-    const services = body.services || existingDriver.services;
-    if (!services.includes(body.primaryService)) {
-      return createValidationError([{
-        field: 'primaryService',
-        message: 'Primary service must be included in services array',
-        code: 'INVALID_PRIMARY_SERVICE',
-      }], `/api/drivers/${id}`, 'PATCH');
+  const { id } = paramsValidation.data;
+  
+  // Validate and parse request body
+  const bodyData = await validateBody(DriverUpdateSchema)(request);
+  if (bodyData instanceof Response) {
+    return bodyData; // Return validation error
+  }
+  
+  try {
+    // Check if driver exists
+    const existingDriver = await prisma.driver.findUnique({
+      where: { id }
+    });
+    
+    if (!existingDriver) {
+      return createNotFoundError('Driver', `/api/drivers/${id}`, 'PATCH');
     }
-  }
-  
-  // Update driver with partial data
-  const updatedDriver = MockDataService.updateDriver(id, body);
-  
-  if (!updatedDriver) {
+    
+    // Update driver
+    const updatedDriver = await prisma.driver.update({
+      where: { id },
+      data: bodyData,
+      include: {
+        regionAssignments: {
+          include: {
+            region: true
+          }
+        }
+      }
+    });
+    
+    return createApiResponse(
+      { driver: updatedDriver },
+      'Driver updated successfully'
+    );
+    
+  } catch (error) {
+    console.error('Error updating driver:', error);
     return createApiError(
       'Failed to update driver',
       'UPDATE_FAILED',
@@ -197,11 +219,6 @@ export const PATCH = asyncHandler(async (request: NextRequest, context?: { param
       'PATCH'
     );
   }
-  
-  return createApiResponse(
-    { driver: updatedDriver },
-    'Driver updated successfully'
-  );
 });
 
 // DELETE /api/drivers/[id] - Delete driver

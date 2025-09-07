@@ -12,7 +12,9 @@ import {
   handleOptionsRequest
 } from '@/lib/api-utils';
 import { withEnhancedAuth, requirePermission } from '@/lib/auth/enhanced-auth';
-import { MockDataService } from '@/lib/mockData';
+import { prisma } from '@/lib/prisma';
+import { validateQuery } from '@/lib/validate';
+import { DriverQuerySchema } from '@/lib/schemas';
 import { CreateDriverRequest } from '@/types';
 import { versionedApiRoute, createVersionedResponse } from '@/middleware/apiVersioning';
 
@@ -20,46 +22,47 @@ const getDriversV1 = withEnhancedAuth({
   requiredPermissions: ['assign_driver', 'view_driver_files_masked'],
   dataClass: 'internal'
 })(async (request: NextRequest, user) => {
-  const queryParams = parseQueryParams(request);
-  const paginationParams = parsePaginationParams(request);
-  
-  // Apply regional filtering for users with regional restrictions
-  let regionFilter = queryParams.region;
-  const userRegions = user.allowedRegions || [];
-  if (userRegions.length > 0 && !userRegions.includes(regionFilter)) {
-    regionFilter = userRegions[0]; // Use first allowed region
+  // Validate query parameters
+  const queryValidation = validateQuery(DriverQuerySchema, request.nextUrl.searchParams);
+  if (queryValidation.error) {
+    return queryValidation.error;
   }
   
-  // Get drivers with filters
-  const drivers = MockDataService.getDrivers({
-    status: queryParams.status,
-    region: regionFilter,
-    search: queryParams.search,
-    services: queryParams.services,
+  const { limit, cursor, status, search } = queryValidation.data;
+  
+  // Build where clause
+  const where: any = {};
+  if (status) {
+    where.status = status;
+  }
+  if (search) {
+    where.OR = [
+      { name: { contains: search, mode: 'insensitive' } },
+      { email: { contains: search, mode: 'insensitive' } },
+      { phone: { contains: search } }
+    ];
+  }
+  
+  // Cursor-based pagination
+  const drivers = await prisma.driver.findMany({
+    where,
+    take: limit,
+    ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+    orderBy: { createdAt: "desc" },
+    include: {
+      regionAssignments: {
+        include: {
+          region: true
+        }
+      }
+    }
   });
   
-  // Apply sorting
-  let sortedDrivers = [...drivers];
-  if (paginationParams.sortBy) {
-    sortedDrivers.sort((a, b) => {
-      const aValue = (a as any)[paginationParams.sortBy!];
-      const bValue = (b as any)[paginationParams.sortBy!];
-      
-      if (aValue < bValue) return paginationParams.sortOrder === 'asc' ? -1 : 1;
-      if (aValue > bValue) return paginationParams.sortOrder === 'asc' ? 1 : -1;
-      return 0;
-    });
-  }
-  
-  // Apply pagination
-  const paginatedResult = applyPagination(
-    sortedDrivers,
-    paginationParams.page,
-    paginationParams.limit
-  );
-  
   return createVersionedResponse(
-    paginatedResult.data,
+    { 
+      drivers,
+      nextCursor: drivers.length === limit ? drivers[drivers.length - 1].id : null
+    },
     'v1'
   );
 });

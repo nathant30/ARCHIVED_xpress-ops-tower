@@ -40,6 +40,7 @@ const methodRE = "(get|post|put|patch|delete|options|head)";
 const expressRE = new RegExp(`\\b(?:app|router)\\.${methodRE}\\s*\\(\\s*['"\`]([^'"\\)\\}]+)['"\`]`,"ig");
 const fastifyRE = new RegExp(`\\bfastify\\.${methodRE}\\s*\\(\\s*['"\`]([^'"\\)\\}]+)['"\`]`,"ig");
 const nestRE    = new RegExp(`@\\s*(Get|Post|Put|Patch|Delete|Options|Head)\\s*\\(\\s*['"\`]([^'"\\)\\}]+)?['"\`]??\\s*\\)`, "ig");
+const nextjsRE  = new RegExp(`export\\s+async\\s+function\\s+(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\\s*\\(`, "ig");
 
 const up = s=>s.toUpperCase();
 const normPath = p=>{
@@ -56,6 +57,18 @@ for (const f of files) {
   for (const m of t.matchAll(expressRE)) codeRoutes.add(`${up(m[1])} ${normPath(m[2])}`);
   for (const m of t.matchAll(fastifyRE)) codeRoutes.add(`${up(m[1])} ${normPath(m[2])}`);
   for (const m of t.matchAll(nestRE))    codeRoutes.add(`${up(m[1])} ${normPath(m[2]||"/")}`);
+  
+  // Next.js App Router detection
+  if (f.includes('/app/api/') && f.endsWith('/route.ts')) {
+    for (const m of t.matchAll(nextjsRE)) {
+      const method = m[1].toUpperCase();
+      // Convert file path to API path: src/app/api/alerts/route.ts -> /api/alerts
+      const apiPath = f
+        .replace(/.*\/app(\/api\/.*)\/route\.ts$/, '$1')
+        .replace(/\[([^\]]+)\]/g, '{$1}'); // Convert [param] to {param}
+      codeRoutes.add(`${method} ${normPath(apiPath)}`);
+    }
+  }
 }
 
 function loadOpenApi() {

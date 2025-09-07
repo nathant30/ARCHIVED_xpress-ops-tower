@@ -3,8 +3,8 @@
 // DELETE /api/admin/users/{id}/overrides/{overrideId} - Remove override
 
 import { NextRequest, NextResponse } from 'next/server';
-import { query, transaction } from '@/lib/db';
-import { requireSuperAdmin, buildAccessContext } from '@/middleware/accessContext';
+import { query } from '@/lib/db';
+import crypto from 'crypto';
 
 interface CreateOverrideRequest {
   regionId: string;

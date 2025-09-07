@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Import design tokens */
+@import '@xpress-ops/ui-tokens/css/xp-tokens.css';
+@import '@xpress-ops/ui-tokens/css/xp-tokens.dark.css';
+
+html {
+  font-family: var(--xp-font-family-base);
+  background-color: var(--xp-bg-page);
+  color: var(--xp-text-primary);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Ensure focus rings are visible */
+*:focus-visible {
+  outline: var(--xp-focus-ring-width) solid var(--xp-focus-ring);
+  outline-offset: var(--xp-focus-ring-offset);
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

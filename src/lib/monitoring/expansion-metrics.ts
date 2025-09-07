@@ -5,6 +5,7 @@
 
 import { createPrometheusRegistry, register } from '../observability/prometheus';
 import { Counter, Histogram, Gauge } from 'prom-client';
+import { logger } from '../security/productionLogger';
 
 // Metrics for expansion operations
 export const expansionOperationsCounter = new Counter({
@@ -110,7 +111,10 @@ export function recordExpansionOperation(params: {
 
   // Log security-relevant operations
   if (['promote_region_stage', 'configure_prelaunch_pricing_flagged'].includes(action)) {
-    .toISOString(),
+    logger.info('Security-relevant expansion operation', {
+      action,
+      userId,
+      timestamp: new Date().toISOString(),
       metadata
     });
   }
@@ -175,7 +179,11 @@ export function recordExpansionHandover(params: {
     })
     .observe(durationHours);
 
-  .toISOString()
+  logger.info('Expansion handover completed', {
+    regionId,
+    handoverType,
+    duration: durationHours,
+    timestamp: new Date().toISOString()
   });
 }
 

@@ -135,7 +135,7 @@ export function EnhancedAuthProvider({ children }: { children: ReactNode }) {
 
   const validateToken = async (token: string): Promise<void> => {
     try {
-      const response = await fetch('/api/auth/enhanced/validate', {
+      const response = await fetch('/api/auth/validate', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -192,7 +192,7 @@ export function EnhancedAuthProvider({ children }: { children: ReactNode }) {
     setAuthState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      const response = await fetch('/api/auth/enhanced/login', {
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(credentials)
@@ -213,13 +213,13 @@ export function EnhancedAuthProvider({ children }: { children: ReactNode }) {
         throw new Error(data.error?.message || data.message || 'Login failed');
       }
 
-      const authResponse: AuthenticationResponse = data.data;
+      const authResponse = data.data;
       
-      // Store tokens
-      localStorage.setItem(TOKEN_KEY, authResponse.tokens.accessToken);
-      localStorage.setItem(REFRESH_KEY, authResponse.tokens.refreshToken);
+      // Store tokens (API returns token/refreshToken, not nested in tokens object)
+      localStorage.setItem(TOKEN_KEY, authResponse.token);
+      localStorage.setItem(REFRESH_KEY, authResponse.refreshToken);
 
-      const decoded = jwtDecode<EnhancedJWTPayload>(authResponse.tokens.accessToken);
+      const decoded = jwtDecode<EnhancedJWTPayload>(authResponse.token);
 
       setAuthState({
         user: authResponse.user,
@@ -282,7 +282,7 @@ export function EnhancedAuthProvider({ children }: { children: ReactNode }) {
         throw new Error('No refresh token available');
       }
 
-      const response = await fetch('/api/auth/enhanced/refresh', {
+      const response = await fetch('/api/auth/refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken })
@@ -293,12 +293,12 @@ export function EnhancedAuthProvider({ children }: { children: ReactNode }) {
       }
 
       const { data } = await response.json();
-      const authResponse: AuthenticationResponse = data;
+      const authResponse = data;
       
-      localStorage.setItem(TOKEN_KEY, authResponse.tokens.accessToken);
-      localStorage.setItem(REFRESH_KEY, authResponse.tokens.refreshToken);
+      localStorage.setItem(TOKEN_KEY, authResponse.token);
+      localStorage.setItem(REFRESH_KEY, authResponse.refreshToken);
 
-      const decoded = jwtDecode<EnhancedJWTPayload>(authResponse.tokens.accessToken);
+      const decoded = jwtDecode<EnhancedJWTPayload>(authResponse.token);
 
       setAuthState(prev => ({
         ...prev,

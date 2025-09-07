@@ -1,0 +1,35 @@
+{
+  "name": "@xpress-ops/ui-charts",
+  "version": "0.1.0",
+  "description": "Chart wrapper components using Recharts for Xpress Ops Tower",
+  "main": "dist/index.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts --clean",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "type-check": "tsc --noEmit"
+  },
+  "files": [
+    "dist"
+  ],
+  "peerDependencies": {
+    "react": ">=18.0.0",
+    "react-dom": ">=18.0.0"
+  },
+  "dependencies": {
+    "@xpress-ops/ui-tokens": "^0.1.0",
+    "recharts": "^2.12.7"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "tsup": "^8.0.0",
+    "typescript": "^5.5.4"
+  },
+  "keywords": ["react", "charts", "recharts", "design-system", "xpress"],
+  "author": "Xpress Ops Team",
+  "license": "MIT"
+}

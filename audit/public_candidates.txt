@@ -1,0 +1,10 @@
+GET /api/analytics
+GET /api/bookings
+POST /api/bookings
+GET /api/drivers
+GET /api/metrics
+GET /api/pricing/profiles
+POST /api/rides/request
+GET /api/alerts
+GET /api/pricing/taxi-fares
+GET /api/pricing/tnvs-fares

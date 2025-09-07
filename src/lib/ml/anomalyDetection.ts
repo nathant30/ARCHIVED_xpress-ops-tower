@@ -467,7 +467,7 @@ class AnomalyDetectionEngine {
     userId: string
   ): Promise<void> {
     const alert: AnomalyAlert = {
-      id: `anomaly_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: `anomaly_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
       type: this.determineAnomalyType(anomalyScore.dimensions),
       severity: this.determineSeverity(anomalyScore.overall),
       userId,

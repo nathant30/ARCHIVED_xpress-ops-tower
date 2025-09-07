@@ -1,0 +1,14 @@
+{
+  "summary": {
+    "totalApiPaths": 0,
+    "directFetchCalls": 0,
+    "wrapperCalls": 0,
+    "queryKeys": 0
+  },
+  "apiPathsFound": [],
+  "details": {
+    "directFetchCalls": [],
+    "wrapperCalls": [],
+    "queryKeys": []
+  }
+}

@@ -5,15 +5,22 @@ const buckets = new Map<string, Counter>();         // per-IP+path window counte
 type Seen = { until: number };
 const idem = new Map<string, Seen>();               // simple idempotency TTL cache
 
-const ENV = {
-  enabled: true, // Force enabled for testing
-  windowMs: 60000, // 1 minute
-  max: 10, // Much lower limit for testing
-  idemTtlMs: 900000, // 15m
-};
+// Environment variables are resolved at runtime in production
+function getEnv() {
+  return {
+    enabled:
+      process.env.RATE_LIMIT_ENABLED === 'true' ||
+      process.env.RELEASE_STATE === 'uat' ||
+      process.env.RELEASE_STATE === 'production',
+    windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS ?? '60000'),
+    max: Number(process.env.RATE_LIMIT_MAX ?? '5'),
+    idemTtlMs: Number(process.env.IDEMPOTENCY_TTL_MS ?? '900000'), // 15m
+  };
+}
 
 function keyFor(req: NextRequest) {
-  const ip = req.ip ?? req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? '0.0.0.0';
+  const forwarded = req.headers.get('x-forwarded-for');
+  const ip = forwarded?.split(',')[0]?.trim() ?? req.headers.get('x-real-ip') ?? '0.0.0.0';
   return `${ip}:${req.nextUrl.pathname}`;
 }
 
@@ -38,11 +45,28 @@ function applySecurityHeaders(response: NextResponse) {
 }
 
 export function middleware(req: NextRequest) {
+  console.log(`🐛 Middleware called for: ${req.nextUrl.pathname}`);
+  
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     const response = new NextResponse(null, { status: 200 });
     return applySecurityHeaders(response);
   }
+
+  const env = getEnv();
+  
+  // Debug logging
+  if (req.nextUrl.pathname.startsWith('/api/')) {
+    console.log(`🐛 API Middleware - Path: ${req.nextUrl.pathname}, Enabled: ${env.enabled}, Max: ${env.max}, Window: ${env.windowMs}ms`);
+  }
+  
+  // Dev mode escape hatch - force rate limiting with header
+  const enabledFromEnv = env.enabled;
+  const forceInDev = 
+    process.env.NODE_ENV !== 'production' &&
+    req.headers.get('x-force-rl') === '1';
+  const rateLimitEnabled = enabledFromEnv || forceInDev;
+  
 
   // Idempotency for unsafe methods (API routes only)
   if (req.nextUrl.pathname.startsWith('/api/') && ['POST','PUT','PATCH','DELETE'].includes(req.method)) {
@@ -57,16 +81,16 @@ export function middleware(req: NextRequest) {
         );
         return applySecurityHeaders(response);
       }
-      idem.set(idemKey, { until: now + ENV.idemTtlMs });
+      idem.set(idemKey, { until: now + env.idemTtlMs });
     }
   }
 
   // Rate limiting for API routes
-  if (req.nextUrl.pathname.startsWith('/api/') && ENV.enabled) {
+  if (req.nextUrl.pathname.startsWith('/api/') && rateLimitEnabled) {
     const now = Date.now();
     const k = keyFor(req);
-    const win = ENV.windowMs;
-    const max = ENV.max;
+    const win = env.windowMs;
+    const max = env.max;
 
     const rec = buckets.get(k);
     
@@ -96,6 +120,10 @@ export function middleware(req: NextRequest) {
   // Add correlation ID
   const correlationId = req.headers.get('x-correlation-id') || crypto.randomUUID();
   response.headers.set('X-Correlation-ID', correlationId);
+  
+  // Debug header to confirm our middleware is running
+  response.headers.set('X-Debug-Middleware', 'active');
+  response.headers.set('X-Debug-Rate-Limit', `enabled:${rateLimitEnabled},max:${env.max}`);
   
   return applySecurityHeaders(response);
 }

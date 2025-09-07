@@ -1,0 +1,42 @@
+{
+  "name": "@xpress-ops/xpress-ops-xpui",
+  "version": "0.1.0",
+  "description": "Xpress Ops Tower with new XP UI Design System",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 4003",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tailwindcss/postcss": "^4.1.13",
+    "@xpress-ops/ui": "^0.1.0",
+    "@xpress-ops/ui-charts": "^0.1.0",
+    "@xpress-ops/ui-tokens": "^0.1.0",
+    "lucide-react": "^0.542.0",
+    "next": "^15.5.2",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9",
+    "@xpress-ops/eslint-plugin-xp-tokens": "^0.1.0",
+    "autoprefixer": "^10.4.21",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "^14.2.5",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.13",
+    "typescript": "^5.5.4"
+  },
+  "keywords": [
+    "nextjs",
+    "xpress",
+    "design-system",
+    "ui"
+  ],
+  "author": "Xpress Ops Team"
+}

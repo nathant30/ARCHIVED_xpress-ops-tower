@@ -1,0 +1,2 @@
+GET /api/analytics
+GET /api/bookings

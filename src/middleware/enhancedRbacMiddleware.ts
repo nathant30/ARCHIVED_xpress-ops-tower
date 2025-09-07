@@ -17,7 +17,7 @@ const JWT_SECRET = process.env.JWT_SECRET || (() => {
     throw new Error('JWT_SECRET environment variable is required in production');
   }
   console.warn('⚠️  Using development JWT secret - not for production use');
-  return 'dev-jwt-secret-' + Math.random().toString(36).substr(2, 9);
+  return 'dev-jwt-secret-' + Math.random().toString(36).substring(2, 11);
 })();
 
 interface EnhancedRBACPayload {

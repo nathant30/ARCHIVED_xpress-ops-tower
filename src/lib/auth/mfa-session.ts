@@ -106,7 +106,7 @@ export function createMFAChallenge(
   method: string = 'TOTP',
   ttlMinutes: number = 5
 ): MFAChallenge {
-  const challengeId = `mfa-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  const challengeId = `mfa-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
   
   const challenge: MFAChallenge = {
     challengeId,

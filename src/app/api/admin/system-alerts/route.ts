@@ -60,7 +60,7 @@ export const POST = withRBAC(
 
 // GET /api/admin/system-alerts - Get system alerts (Admin only)
 export const GET = withRBAC(
-  asyncHandler(async (request: AuthenticatedRequest) => {
+  asyncHandler(async (_request: AuthenticatedRequest) => {
     try {
       // Mock alert data - in production this would come from database
       const alerts = [

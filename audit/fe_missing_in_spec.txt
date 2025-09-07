@@ -1,0 +1,15 @@
+GET /api/alerts
+GET /api/analytics
+GET /api/auth/mfa/challenge
+GET /api/auth/mfa/verify
+GET /api/bookings
+GET /api/drivers/{param}/status
+GET /api/metrics
+GET /api/pricing/events
+GET /api/pricing/profiles
+GET /api/pricing/profiles/{param}
+GET /api/pricing/profiles/{param}/components
+GET /api/pricing/profiles/{param}/preview
+GET /api/pricing/taxi-fares
+GET /api/pricing/tnvs-fares
+GET /api/pricing/tolls

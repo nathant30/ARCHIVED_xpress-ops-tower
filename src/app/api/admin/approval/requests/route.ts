@@ -4,8 +4,6 @@ import {
   createApiResponse, 
   createApiError,
   parseQueryParams,
-  parsePaginationParams,
-  asyncHandler,
   handleOptionsRequest
 } from '@/lib/api-utils';
 import { withRBAC, type AuthenticatedRequest } from '@/middleware/rbacMiddleware';
@@ -14,8 +12,7 @@ import { secureLog } from '@/lib/security/securityUtils';
 import type { 
   ListApprovalRequestsQuery, 
   ListApprovalRequestsResponse,
-  ApprovalRequest,
-  ApprovalWorkflow
+  ApprovalRequest
 } from '@/types/approval';
 
 // Mock database functions - replace with actual database queries in production
@@ -270,119 +267,6 @@ export const GET = withRBAC(async (request: AuthenticatedRequest) => {
   permissions: ['view_pending_approvals', 'view_own_approval_requests', 'approve_requests'],
   requireAll: false, // Any of these permissions
   minLevel: 10 // Ground ops and above
-});
-
-// GET /api/admin/approval/requests/[id] - Get specific approval request by ID
-export const getApprovalRequestById = withRBAC(async (request: AuthenticatedRequest, { params }: { params: { id: string } }) => {
-  const user = request.user!;
-  const requestId = params.id;
-  const clientIP = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
-
-  try {
-    // Mock database query - in production, query approval_requests table
-    const mockRequest: ApprovalRequest | null = requestId === 'req-test-001' ? {
-      request_id: 'req-test-001',
-      workflow_id: 1,
-      requester_id: 'usr-ground-ops-001',
-      status: 'pending',
-      justification: 'Need to configure critical alerts for Manila region after incident reports',
-      requested_action: JSON.stringify({
-        action: 'configure_alerts',
-        region: 'ph-ncr-manila',
-        alert_types: ['driver_emergency', 'passenger_safety']
-      }),
-      requested_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-      expires_at: new Date(Date.now() + 22 * 60 * 60 * 1000).toISOString(),
-      workflow: {
-        workflow_id: 1,
-        action: 'configure_alerts',
-        required_approvers: 1,
-        sensitivity_threshold: 0.3,
-        temporary_access_ttl: 3600,
-        created_at: new Date().toISOString(),
-        is_active: true
-      },
-      requester_info: {
-        email: 'ground.ops.manila@xpress.test',
-        full_name: 'Test Ground Ops',
-        role: 'ground_ops'
-      }
-    } : null;
-
-    if (!mockRequest) {
-      return createApiError(
-        `Approval request not found: ${requestId}`,
-        'APPROVAL_REQUEST_NOT_FOUND',
-        404,
-        undefined,
-        `/api/admin/approval/requests/${requestId}`,
-        'GET'
-      );
-    }
-
-    // Permission check: users can only view their own requests unless they have view_pending_approvals permission
-    const canViewAllRequests = user.permissions.includes('view_pending_approvals') || 
-                              user.permissions.includes('approve_requests') ||
-                              user.level >= 25;
-
-    if (!canViewAllRequests && mockRequest.requester_id !== user.user_id) {
-      return createApiError(
-        'You can only view your own approval requests',
-        'INSUFFICIENT_PERMISSIONS',
-        403,
-        undefined,
-        `/api/admin/approval/requests/${requestId}`,
-        'GET'
-      );
-    }
-
-    // Log the access
-    await auditLogger.logEvent(
-      AuditEventType.DATA_ACCESS,
-      SecurityLevel.LOW,
-      'SUCCESS',
-      { resource: 'approval_request', request_id: requestId },
-      { 
-        userId: user.user_id, 
-        resource: 'approval_request', 
-        action: 'view', 
-        resourceId: requestId,
-        ipAddress: clientIP 
-      }
-    );
-
-    return createApiResponse(
-      mockRequest,
-      'Approval request retrieved successfully',
-      200
-    );
-
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to retrieve approval request';
-    
-    await auditLogger.logEvent(
-      AuditEventType.DATA_ACCESS,
-      SecurityLevel.HIGH,
-      'FAILURE',
-      { error: errorMessage, resource: 'approval_request', request_id: requestId },
-      { userId: user.user_id, resource: 'approval_request', action: 'view', resourceId: requestId, ipAddress: clientIP }
-    );
-
-    secureLog.error('Approval request retrieval error:', error);
-    
-    return createApiError(
-      'Failed to retrieve approval request',
-      'APPROVAL_REQUEST_RETRIEVAL_ERROR',
-      500,
-      undefined,
-      `/api/admin/approval/requests/${requestId}`,
-      'GET'
-    );
-  }
-}, {
-  permissions: ['view_pending_approvals', 'view_own_approval_requests', 'approve_requests'],
-  requireAll: false,
-  minLevel: 10
 });
 
 // OPTIONS handler for CORS

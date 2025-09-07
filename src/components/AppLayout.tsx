@@ -9,7 +9,7 @@ import { useEnhancedAuth } from '@/hooks/useEnhancedAuth';
 import { logger } from '@/lib/security/productionLogger';
 
 interface HealthStatus {
-  status: string;
+  status: 'healthy' | 'unhealthy';
   services: {
     api: string;
     database: string;
@@ -95,11 +95,41 @@ export default function AppLayout({ children }: AppLayoutProps) {
   useEffect(() => {
     const fetchHealthStatus = async () => {
       try {
-        const healthRes = await fetch('/api/health');
-        const healthData = await healthRes.json();
-        setHealthStatus(healthData.data);
+        console.log('Attempting to fetch health status...');
+        const healthRes = await fetch('/api/health', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+        console.log('Health response status:', healthRes.status);
+        
+        if (!healthRes.ok) {
+          throw new Error(`HTTP ${healthRes.status}: ${healthRes.statusText}`);
+        }
+        
+        const healthResponse = await healthRes.json();
+        console.log('Health response data:', healthResponse);
+        
+        if (healthResponse && healthResponse.data) {
+          setHealthStatus(healthResponse.data);
+          console.log('Health status set successfully:', healthResponse.data);
+        } else {
+          throw new Error('Invalid health response format');
+        }
       } catch (error) {
-        logger.error('Error fetching health status', { component: 'AppLayout' });
+        console.error('Health check failed:', error);
+        // Set a fallback status when health check fails
+        setHealthStatus({
+          status: 'unhealthy',
+          services: {
+            api: 'error',
+            database: 'error',
+            websockets: 'error',
+            location_tracking: 'error',
+            emergency_system: 'error',
+          }
+        });
       }
     };
 

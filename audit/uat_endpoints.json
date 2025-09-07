@@ -1,0 +1,34 @@
+[
+  { 
+    "method": "GET",  
+    "path": "/api/analytics",      
+    "expect": 200 
+  },
+  { 
+    "method": "GET",  
+    "path": "/api/bookings",       
+    "expect": 200 
+  },
+  {
+    "method": "POST", 
+    "path": "/api/rides",  
+    "expect": 400,
+    "body": {
+      "customerId": "00000000-0000-0000-0000-000000000001",
+      "pickupLocation": { 
+        "latitude": 14.5538, 
+        "longitude": 121.0244,
+        "address": "Makati Central Business District, Makati, Metro Manila"
+      },
+      "dropoffLocation": { 
+        "latitude": 14.6091, 
+        "longitude": 121.0223,
+        "address": "Quezon City, Metro Manila" 
+      },
+      "vehicleType": "sedan",
+      "serviceType": "standard",
+      "priority": "normal"
+    },
+    "idempotent": true
+  }
+]

@@ -32,15 +32,75 @@ jest.mock('next/image', () => ({
 // Mock Redis for testing
 jest.mock('@/lib/redis', () => ({
   redis: {
+    // Session management
     createSession: jest.fn().mockResolvedValue(undefined),
     getSession: jest.fn().mockResolvedValue(null),
     updateSessionActivity: jest.fn().mockResolvedValue(undefined),
     deleteSession: jest.fn().mockResolvedValue(undefined),
     checkRateLimit: jest.fn().mockResolvedValue({ allowed: true, remaining: 99 }),
     healthCheck: jest.fn().mockResolvedValue({ status: 'healthy' }),
+    
+    // Cache management
     setCache: jest.fn().mockResolvedValue(undefined),
     getCache: jest.fn().mockResolvedValue(null),
     deleteCache: jest.fn().mockResolvedValue(1),
+    
+    // Standard Redis methods
+    get: jest.fn().mockResolvedValue(null),
+    set: jest.fn().mockResolvedValue('OK'),
+    del: jest.fn().mockResolvedValue(1),
+    exists: jest.fn().mockResolvedValue(0),
+    expire: jest.fn().mockResolvedValue(1),
+    ttl: jest.fn().mockResolvedValue(-1),
+    
+    // Hash operations  
+    hget: jest.fn().mockResolvedValue(null),
+    hset: jest.fn().mockResolvedValue(1),
+    hgetall: jest.fn().mockResolvedValue({}),
+    hdel: jest.fn().mockResolvedValue(1),
+    
+    // Sorted sets
+    zadd: jest.fn().mockResolvedValue(1),
+    zrange: jest.fn().mockResolvedValue([]),
+    zrem: jest.fn().mockResolvedValue(1),
+    zrank: jest.fn().mockResolvedValue(0),
+    zscore: jest.fn().mockResolvedValue(null),
+    
+    // Lists
+    lpush: jest.fn().mockResolvedValue(1),
+    rpush: jest.fn().mockResolvedValue(1),
+    lpop: jest.fn().mockResolvedValue(null),
+    rpop: jest.fn().mockResolvedValue(null),
+    lrange: jest.fn().mockResolvedValue([]),
+    
+    // Sets
+    sadd: jest.fn().mockResolvedValue(1),
+    srem: jest.fn().mockResolvedValue(1),
+    smembers: jest.fn().mockResolvedValue([]),
+    sismember: jest.fn().mockResolvedValue(0),
+    
+    // Geospatial operations
+    geoadd: jest.fn().mockResolvedValue(1),
+    georadius: jest.fn().mockResolvedValue([]),
+    georadiusbymember: jest.fn().mockResolvedValue([]),
+    geopos: jest.fn().mockResolvedValue([]),
+    geodist: jest.fn().mockResolvedValue(null),
+    
+    // Pub/Sub
+    publish: jest.fn().mockResolvedValue(0),
+    subscribe: jest.fn().mockResolvedValue(undefined),
+    unsubscribe: jest.fn().mockResolvedValue(undefined),
+    
+    // Transactions
+    multi: jest.fn().mockReturnValue({
+      exec: jest.fn().mockResolvedValue([]),
+      discard: jest.fn().mockResolvedValue('OK'),
+    }),
+    
+    // Pipeline
+    pipeline: jest.fn().mockReturnValue({
+      exec: jest.fn().mockResolvedValue([]),
+    }),
   },
   getRedis: jest.fn(() => ({
     healthCheck: jest.fn().mockResolvedValue({ status: 'healthy' }),

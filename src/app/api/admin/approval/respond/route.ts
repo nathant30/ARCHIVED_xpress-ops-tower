@@ -1,12 +1,8 @@
 // /api/admin/approval/respond - Approve or Reject Approval Requests
 import { NextRequest } from 'next/server';
-import jwt from 'jsonwebtoken';
 import { 
   createApiResponse, 
   createApiError,
-  createValidationError,
-  validateRequiredFields,
-  asyncHandler,
   handleOptionsRequest
 } from '@/lib/api-utils';
 import { withRBAC, type AuthenticatedRequest } from '@/middleware/rbacMiddleware';
@@ -20,13 +16,6 @@ import type {
   TemporaryAccessToken
 } from '@/types/approval';
 import type { Permission } from '@/hooks/useRBAC';
-
-const JWT_SECRET = process.env.JWT_SECRET || (() => {
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('JWT_SECRET must be set in production environment');
-  }
-  return require('crypto').randomBytes(32).toString('hex');
-})();
 
 // Mock database functions - replace with actual database queries in production
 async function getApprovalRequestById(requestId: string): Promise<ApprovalRequest | null> {
@@ -96,7 +85,7 @@ async function getApprovalRequestById(requestId: string): Promise<ApprovalReques
   return null;
 }
 
-async function getExistingApprovals(requestId: string): Promise<ApprovalResponse[]> {
+async function getExistingApprovals(_requestId: string): Promise<ApprovalResponse[]> {
   // Mock data - in production, query approval_responses table
   return [];
 }
@@ -115,7 +104,7 @@ async function saveApprovalResponse(
     request_id: requestId,
     approver_id: approverId,
     decision,
-    comments,
+    ...(comments && { comments }),
     responded_at: new Date().toISOString()
   };
   
@@ -123,9 +112,9 @@ async function saveApprovalResponse(
 }
 
 async function updateApprovalRequestStatus(
-  requestId: string,
-  status: 'approved' | 'rejected',
-  completedAt: string
+  _requestId: string,
+  _status: 'approved' | 'rejected',
+  _completedAt: string
 ): Promise<void> {
   // Mock database update - in production, update approval_requests table
   }
@@ -150,9 +139,12 @@ async function createTemporaryAccessToken(
     expires_at: expiresAt.toISOString(),
     granted_by: grantedBy,
     granted_for_request: requestId,
-    created_at: now.toISOString(),
-    metadata
+    created_at: now.toISOString()
   };
+  
+  if (metadata) {
+    tempToken.metadata = metadata;
+  }
   
   // Mock database insert - in production, insert into temporary_access_tokens table
   return tempToken;
@@ -229,12 +221,6 @@ export const POST = withRBAC(async (request: AuthenticatedRequest) => {
   
   const clientIP = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
 
-  // Validate required fields
-  const validationErrors = validateRequiredFields(body, ['request_id', 'decision']);
-  
-  if (validationErrors.length > 0) {
-    return createValidationError(validationErrors, '/api/admin/approval/respond', 'POST');
-  }
 
   // Validate decision value
   if (!['approve', 'reject'].includes(body.decision)) {
@@ -343,7 +329,6 @@ export const POST = withRBAC(async (request: AuthenticatedRequest) => {
 
     // Calculate approval status
     const approvals = existingApprovals.filter(resp => resp.decision === 'approve');
-    const rejections = existingApprovals.filter(resp => resp.decision === 'reject');
     
     let isFullyApproved = false;
     let isRejected = body.decision === 'reject';
@@ -402,24 +387,31 @@ export const POST = withRBAC(async (request: AuthenticatedRequest) => {
         userId: user.user_id, 
         resource: 'approval_request', 
         action: body.decision, 
-        resourceId: body.request_id,
         ipAddress: clientIP 
       }
     );
 
     // Prepare response
+    const updatedRequest = {
+      ...approvalRequest,
+      status: finalStatus
+    };
+    
+    if (finalStatus !== 'pending') {
+      updatedRequest.completed_at = new Date().toISOString();
+    }
+    
     const response: ApprovalDecisionResponse = {
       response_id: approvalResponse.response_id,
-      request: {
-        ...approvalRequest,
-        status: finalStatus,
-        completed_at: finalStatus !== 'pending' ? new Date().toISOString() : undefined
-      },
+      request: updatedRequest,
       decision: body.decision,
-      temporary_access_token: temporaryAccessToken,
       next_required_approvals: isFullyApproved || isRejected ? 0 : (approvalRequest.workflow!.required_approvers - approvals.length - 1),
       fully_approved: isFullyApproved
     };
+    
+    if (temporaryAccessToken) {
+      response.temporary_access_token = temporaryAccessToken;
+    }
 
     const statusCode = isFullyApproved ? 200 : (isRejected ? 200 : 202); // 202 for partial approval
     const message = isRejected 
@@ -442,7 +434,7 @@ export const POST = withRBAC(async (request: AuthenticatedRequest) => {
       SecurityLevel.HIGH,
       'FAILURE',
       { error: errorMessage, request_id: body.request_id, decision: body.decision },
-      { userId: user.user_id, resource: 'approval_request', action: 'respond', resourceId: body.request_id, ipAddress: clientIP }
+      { userId: user.user_id, resource: 'approval_request', action: 'respond', ipAddress: clientIP }
     );
 
     secureLog.error('Approval decision error:', error);

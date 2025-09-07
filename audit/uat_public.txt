@@ -1,0 +1,3 @@
+GET /api/analytics
+GET /api/bookings
+POST /api/rides

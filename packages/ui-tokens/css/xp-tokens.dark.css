@@ -1,0 +1,38 @@
+[data-theme="dark"] {
+  --xp-bg-page: #111827;
+  --xp-bg-card: #1F2937;
+  --xp-bg-elevated: #1F2937;
+  --xp-text-primary: #F9FAFB;
+  --xp-text-secondary: #D1D5DB;
+  --xp-text-muted: #9CA3AF;
+  --xp-border-default: #374151;
+  --xp-focus-ring: #3B82F6;
+  --xp-link-default: #3B82F6;
+  --xp-brand-primary: #3B82F6;
+  --xp-status-success: #22C55E;
+  --xp-status-warning: #F59E0B;
+  --xp-status-info: #0EA5E9;
+  --xp-status-critical: #EF4444;
+  --xp-chip-bg-success: rgba(34,197,94,0.18);
+  --xp-chip-bg-warning: rgba(245,158,11,0.18);
+  --xp-chip-bg-info: rgba(14,165,233,0.18);
+  --xp-chip-bg-critical: rgba(220,38,38,0.18);
+  --xp-button-primary-bg: #2563EB;
+  --xp-button-primary-text: #FFFFFF;
+  --xp-button-primary-hover: #1D4ED8;
+  --xp-button-secondary-bg: #1F2937;
+  --xp-button-secondary-border: #374151;
+  --xp-button-secondary-text: #F9FAFB;
+  --xp-input-bg: #1F2937;
+  --xp-input-border: #374151;
+  --xp-input-placeholder: #9CA3AF;
+  --xp-table-row-hover: rgba(59,130,246,0.12);
+  --xp-toast-bg: #F9FAFB;
+  --xp-toast-text: #111827;
+
+  /* Elevation - Dark */
+  --xp-elevation-0: none;
+  --xp-elevation-1: 0 1px 2px rgba(0,0,0,0.5);
+  --xp-elevation-2: 0 2px 8px rgba(0,0,0,0.6);
+  --xp-elevation-3: 0 8px 24px rgba(0,0,0,0.7);
+}

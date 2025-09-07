@@ -492,6 +492,12 @@ export { getDatabase } from './database/connection-manager';
 export { getDatabaseAdapter as dbAdapter };
 export const dbUtils = new DatabaseUtils(getLegacyDatabase());
 
+// Backward compatibility export for getDb
+export const getDb = getDatabaseAdapter;
+
+// Additional backward compatibility export for db
+export const db = getDatabaseAdapter;
+
 // Database initialization for application startup
 export const initializeDatabase = async (): Promise<void> => {
   try {

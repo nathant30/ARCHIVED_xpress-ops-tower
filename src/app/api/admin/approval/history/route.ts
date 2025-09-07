@@ -4,8 +4,6 @@ import {
   createApiResponse, 
   createApiError,
   parseQueryParams,
-  parsePaginationParams,
-  asyncHandler,
   handleOptionsRequest
 } from '@/lib/api-utils';
 import { withRBAC, type AuthenticatedRequest } from '@/middleware/rbacMiddleware';
@@ -281,9 +279,9 @@ async function getApprovalHistoryFromDb(
 }
 
 async function getApprovalStatistics(
-  userId: string,
-  userLevel: number,
-  userPermissions: string[]
+  _userId: string,
+  _userLevel: number,
+  _userPermissions: string[]
 ): Promise<{
   total_requests: number;
   approved: number;
@@ -334,7 +332,7 @@ export const GET = withRBAC(async (request: AuthenticatedRequest) => {
 
     // Log the history access
     await auditLogger.logEvent(
-      AuditEventType.DATA_ACCESS,
+      AuditEventType.API_CALL,
       SecurityLevel.LOW,
       'SUCCESS',
       { 
@@ -375,7 +373,7 @@ export const GET = withRBAC(async (request: AuthenticatedRequest) => {
     const errorMessage = error instanceof Error ? error.message : 'Failed to retrieve approval history';
     
     await auditLogger.logEvent(
-      AuditEventType.DATA_ACCESS,
+      AuditEventType.API_CALL,
       SecurityLevel.HIGH,
       'FAILURE',
       { error: errorMessage, resource: 'approval_history' },
@@ -409,7 +407,7 @@ export const getApprovalStats = withRBAC(async (request: AuthenticatedRequest) =
 
     // Log the statistics access
     await auditLogger.logEvent(
-      AuditEventType.DATA_ACCESS,
+      AuditEventType.API_CALL,
       SecurityLevel.LOW,
       'SUCCESS',
       { resource: 'approval_statistics' },
@@ -431,7 +429,7 @@ export const getApprovalStats = withRBAC(async (request: AuthenticatedRequest) =
     const errorMessage = error instanceof Error ? error.message : 'Failed to retrieve approval statistics';
     
     await auditLogger.logEvent(
-      AuditEventType.DATA_ACCESS,
+      AuditEventType.API_CALL,
       SecurityLevel.HIGH,
       'FAILURE',
       { error: errorMessage, resource: 'approval_statistics' },

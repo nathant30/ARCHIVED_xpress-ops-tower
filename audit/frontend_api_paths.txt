@@ -1,0 +1,16 @@
+/api/analytics
+/api/drivers
+/api/drivers/{param}/status
+/api/auth/mfa/challenge
+/api/auth/mfa/verify
+/api/pricing/events
+/api/pricing/profiles
+/api/pricing/tnvs-fares
+/api/pricing/taxi-fares
+/api/pricing/tolls
+/api/pricing/profiles/{param}
+/api/pricing/profiles/{param}/preview
+/api/pricing/profiles/{param}/components
+/api/alerts
+/api/metrics
+/api/bookings

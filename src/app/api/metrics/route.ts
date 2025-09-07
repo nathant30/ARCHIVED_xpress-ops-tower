@@ -1,46 +1,40 @@
-// Prometheus-compatible metrics endpoint
 import { NextRequest, NextResponse } from 'next/server';
-import { metricsCollector } from '@/lib/monitoring/metricsCollector';
-import { logger } from '@/lib/security/productionLogger';
+import { prisma } from '@/lib/prisma';
 
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest, { params }: { params?: Record<string, string> } = {}) {
   try {
-    // Get query parameters
-    const { searchParams } = new URL(request.url);
-    const format = searchParams.get('format') || 'prometheus';
+    // Parse request data
+    const query = Object.fromEntries(request.nextUrl.searchParams.entries());
+    const body = request.method !== 'GET' ? await request.json().catch(() => ({})) : {};
     
-    if (format === 'prometheus') {
-      // Return Prometheus format
-      const metricsText = metricsCollector.getPrometheusFormat();
-      
-      return new NextResponse(metricsText, {
-        status: 200,
-        headers: {
-          'Content-Type': 'text/plain; version=0.0.4; charset=utf-8',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0'
-        }
-      });
-    } else if (format === 'json') {
-      // Return JSON format for dashboard
-      const metricsSummary = metricsCollector.getMetricsSummary();
-      
-      return NextResponse.json({
-        timestamp: new Date().toISOString(),
-        metrics: metricsSummary
-      });
-    } else {
-      return NextResponse.json({ error: 'Invalid format. Use "prometheus" or "json"' }, { status: 400 });
-    }
+    // Persist event log
+    const event = await prisma.apiEvent.create({
+      data: {
+        method: "GET",
+        path: "/api/metrics", 
+        operation: "get_api_metrics",
+        params: params || {},
+        query,
+        body
+      }
+    });
+
+    // Return baseline response
+    return NextResponse.json({
+      ok: true,
+      data: {
+        id: event.id,
+        operation: "get_api_metrics",
+        timestamp: event.createdAt
+      }
+    }, { status: 200 });
     
   } catch (error) {
-    logger.error(`Metrics endpoint error: ${error instanceof Error ? error.message : error}`);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('Baseline handler error:', error);
+    return NextResponse.json({
+      ok: false,
+      error: "BaselineImplementationError",
+      details: String(error?.message || error)
+    }, { status: 500 });
   }
-}
-
-// Health check for metrics endpoint
-export async function HEAD() {
-  return new NextResponse(null, { status: 200 });
 }

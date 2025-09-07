@@ -206,3 +206,5 @@ prisma/migrations/dev.db*
 # Turbo
 .turbo/
 .vercel
+
+/generated/prisma

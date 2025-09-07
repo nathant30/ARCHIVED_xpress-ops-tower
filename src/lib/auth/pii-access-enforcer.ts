@@ -3,6 +3,7 @@
 
 import { validateMFASession, getMFASession } from './mfa-session';
 import { getMFATTL, getAuditRequirements } from './policy-bundle';
+import { logger } from '../security/productionLogger';
 
 export interface PIIAccessRequest {
   userId: string;
@@ -73,10 +74,13 @@ export function enforcePIIAccess(request: PIIAccessRequest): PIIAccessResult {
   }
 
   // 🔒 HARDENING: Generate audit ID for tracking
-  const auditId = `PII-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`;
+  const auditId = `PII-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
 
   // Log the access attempt
-  ?.method,
+  logger.info('PII access granted', {
+    auditId,
+    userId: request.userId,
+    action,
     timestamp: new Date().toISOString()
   });
 

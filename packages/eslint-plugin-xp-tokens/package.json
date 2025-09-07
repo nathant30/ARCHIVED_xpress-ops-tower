@@ -1,0 +1,32 @@
+{
+  "name": "@xpress-ops/eslint-plugin-xp-tokens",
+  "version": "0.1.0",
+  "description": "ESLint plugin to enforce Xpress Ops design token usage",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "jest"
+  },
+  "files": [
+    "dist",
+    "index.js",
+    "rules"
+  ],
+  "peerDependencies": {
+    "eslint": ">=8.0.0"
+  },
+  "dependencies": {
+    "@typescript-eslint/utils": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/eslint": "^8.0.0",
+    "@types/node": "^20.0.0",
+    "eslint": "^8.57.0",
+    "jest": "^29.0.0",
+    "typescript": "^5.5.4"
+  },
+  "keywords": ["eslint", "eslint-plugin", "design-tokens", "xpress"],
+  "author": "Xpress Ops Team",
+  "license": "MIT"
+}

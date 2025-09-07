@@ -1,0 +1,4 @@
+# one regex per line to ignore from code->spec drift
+^GET \/api\/healthz$
+^GET \/api\/_internal\/.*
+^GET \/api\/admin\/.*

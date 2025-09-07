@@ -5,6 +5,7 @@
 
 import { createPrometheusRegistry, register } from '../observability/prometheus';
 import { Counter, Histogram } from 'prom-client';
+import { logger } from '../security/productionLogger';
 
 // Compliance metrics
 const vendorDataAccessCounter = new Counter({
@@ -176,7 +177,10 @@ export function validateVendorDataAccess(request: {
     .inc();
 
   // Audit log for NPC compliance
-  .toISOString(),
+  logger.info('Vendor data access approved', {
+    vendor: vendor.name,
+    requestType: request.type,
+    timestamp: new Date().toISOString(),
     npc_compliance: true
   });
 
@@ -433,7 +437,8 @@ export function generateNPCComplianceReport(period: { startDate: Date; endDate: 
     ]
   };
   
-  .toISOString()
+  logger.info('Compliance report generated', {
+    timestamp: new Date().toISOString()
   });
   
   return report;

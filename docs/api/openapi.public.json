@@ -1,0 +1,700 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Xpress Ops Tower API",
+    "version": "1.0.0",
+    "description": "Production API for Xpress Ops Tower - Real-time operations command center",
+    "contact": {
+      "name": "Xpress Ops Team",
+      "url": "https://xpress.ph"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:4000",
+      "description": "Development server"
+    },
+    {
+      "url": "https://api.xpress.ph",
+      "description": "Production server"
+    }
+  ],
+  "paths": {
+    "/api/analytics": {
+      "get": {
+        "summary": "(Frontend-called) GET /api/analytics",
+        "description": "Route called by frontend - needs backend implementation",
+        "tags": [
+          "Analytics",
+          "UAT"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsGetResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        },
+        "operationId": "get_api_analytics",
+        "x-status": "baseline",
+        "x-visibility": "public",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-uat-approved": true,
+        "x-promoted-at": "2025-09-07T07:19:08.092Z",
+        "x-parked-at": "2025-09-07T07:36:53.283Z"
+      }
+    },
+    "/api/bookings": {
+      "get": {
+        "summary": "(Frontend-called) GET /api/bookings",
+        "description": "Route called by frontend - needs backend implementation",
+        "tags": [
+          "Bookings",
+          "UAT"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookingsGetResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        },
+        "operationId": "get_api_bookings",
+        "x-status": "baseline",
+        "x-visibility": "public",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-uat-approved": true,
+        "x-promoted-at": "2025-09-07T07:19:08.092Z",
+        "x-parked-at": "2025-09-07T07:36:53.283Z"
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Driver": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "email",
+          "phone",
+          "status",
+          "rating",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "phone": {
+            "type": "string",
+            "pattern": "^\\+63[0-9]{10}$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "inactive",
+              "suspended"
+            ]
+          },
+          "rating": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 5
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "vehicleInfo": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "motorcycle",
+                  "car",
+                  "suv",
+                  "taxi"
+                ]
+              },
+              "model": {
+                "type": "string"
+              },
+              "plateNumber": {
+                "type": "string",
+                "pattern": "^[A-Z]{3}[0-9]{4}$|^[A-Z]{2}[0-9]{5}$"
+              },
+              "color": {
+                "type": "string"
+              },
+              "year": {
+                "type": "integer",
+                "minimum": 1900,
+                "maximum": 2030
+              }
+            }
+          },
+          "location": {
+            "type": "object",
+            "properties": {
+              "latitude": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90
+              },
+              "longitude": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180
+              },
+              "address": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "Pagination": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          },
+          "totalPages": {
+            "type": "integer"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "code": {
+            "type": "integer"
+          }
+        }
+      },
+      "GenericObject": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "StandardError": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
+      "DriversGETRequest": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "RideRequest": {
+        "type": "object",
+        "required": [
+          "pickup",
+          "destination",
+          "serviceType"
+        ],
+        "properties": {
+          "pickup": {
+            "type": "object",
+            "required": [
+              "lat",
+              "lng",
+              "address"
+            ],
+            "properties": {
+              "lat": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90
+              },
+              "lng": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180
+              },
+              "address": {
+                "type": "string"
+              }
+            }
+          },
+          "destination": {
+            "type": "object",
+            "required": [
+              "lat",
+              "lng",
+              "address"
+            ],
+            "properties": {
+              "lat": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90
+              },
+              "lng": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180
+              },
+              "address": {
+                "type": "string"
+              }
+            }
+          },
+          "serviceType": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "premium",
+              "shared",
+              "ride_4w",
+              "ride_2w",
+              "send_delivery"
+            ]
+          },
+          "scheduledTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "passengerCount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8
+          },
+          "specialRequests": {
+            "type": "string"
+          }
+        }
+      },
+      "RideResponse": {
+        "type": "object",
+        "required": [
+          "rideId",
+          "status"
+        ],
+        "properties": {
+          "rideId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "bookingReference": {
+            "type": "string"
+          },
+          "estimatedFare": {
+            "type": "number",
+            "minimum": 0
+          },
+          "estimatedArrival": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "searching",
+              "matched",
+              "assigned",
+              "en_route",
+              "arrived",
+              "in_progress",
+              "completed",
+              "cancelled"
+            ]
+          },
+          "driver": {
+            "$ref": "#/components/schemas/Driver"
+          },
+          "surgeMultiplier": {
+            "type": "number",
+            "minimum": 1
+          }
+        }
+      },
+      "RegionAssignmentRequest": {
+        "type": "object",
+        "required": [
+          "userId"
+        ],
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "regional_manager",
+              "supervisor",
+              "operator"
+            ]
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "RegionAssignmentResponse": {
+        "type": "object",
+        "required": [
+          "success",
+          "assignment"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "assignment": {
+            "type": "object",
+            "required": [
+              "regionId",
+              "userId",
+              "assignedAt"
+            ],
+            "properties": {
+              "regionId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "userId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "assignedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "role": {
+                "type": "string"
+              },
+              "permissions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "DriversListResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Driver"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          },
+          "totalActive": {
+            "type": "integer"
+          },
+          "totalInactive": {
+            "type": "integer"
+          },
+          "averageRating": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 5
+          }
+        }
+      },
+      "DriverUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "inactive",
+              "suspended"
+            ]
+          },
+          "phone": {
+            "type": "string",
+            "pattern": "^\\+63[0-9]{10}$"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "vehicleInfo": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "motorcycle",
+                  "car",
+                  "suv",
+                  "taxi"
+                ]
+              },
+              "model": {
+                "type": "string"
+              },
+              "plateNumber": {
+                "type": "string"
+              },
+              "color": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "AnalyticsGetResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      },
+      "BookingsGetResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      },
+      "DriversGetResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      },
+      "MetricsGetResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      },
+      "PricingProfilesGetResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      },
+      "RidesRequestPostRequest": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
+      "RidesRequestPostResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      },
+      "AlertsGetResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      },
+      "PricingTaxiFaresGetResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      },
+      "PricingTnvsFaresGetResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Drivers",
+      "description": "Driver management operations"
+    },
+    {
+      "name": "Regions",
+      "description": "Regional management operations"
+    },
+    {
+      "name": "Rides",
+      "description": "Ride request and management operations"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ]
+}

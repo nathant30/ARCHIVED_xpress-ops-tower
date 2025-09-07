@@ -609,6 +609,11 @@ export class RBACEngine {
   public validateUserPermissions(user: EnhancedUser): string[] {
     const permissions = new Set<string>();
     
+    // Add direct user permissions first (for backwards compatibility with mock data)
+    if (user.permissions) {
+      user.permissions.forEach(perm => permissions.add(perm));
+    }
+    
     // Collect permissions from all active roles
     for (const roleAssignment of user.roles) {
       if (!roleAssignment.isActive) continue;

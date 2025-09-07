@@ -1,0 +1,175 @@
+# Prometheus Alerting Rules for Expansion Manager Operations
+# Ensures security violations and operational issues are immediately detected
+
+groups:
+- name: expansion_manager_security
+  rules:
+  - alert: ExpansionManagerActiveRegionViolation
+    expr: increase(security_violations_total{role="expansion_manager", violation_type="active_region_access"}[5m]) > 0
+    for: 0m
+    labels:
+      severity: critical
+      team: security
+      service: xpress-ops-tower
+      role: expansion_manager
+    annotations:
+      summary: "🚨 SEV-2: Expansion Manager accessing active regions"
+      description: |
+        expansion_manager attempted to access active/suspended regions
+        
+        User: {{ $labels.user_id }}
+        Region: {{ $labels.region_id }}  
+        Action: {{ $labels.attempted_action }}
+        Timestamp: {{ $labels.timestamp }}
+        
+        This is a critical security boundary violation that must be investigated immediately.
+      runbook_url: "https://ops.xpress.ph/runbooks/expansion-security-violations"
+      
+  - alert: ExpansionManagerPermissionEscalation  
+    expr: increase(security_violations_total{role="expansion_manager", violation_type="permission_escalation"}[5m]) > 0
+    for: 0m
+    labels:
+      severity: critical
+      team: security
+      service: xpress-ops-tower
+    annotations:
+      summary: "🚨 SEV-1: Expansion Manager permission escalation detected"
+      description: |
+        expansion_manager attempted to perform unauthorized actions
+        
+        Attempted Action: {{ $labels.attempted_action }}
+        User: {{ $labels.user_id }}
+        
+        Immediate investigation required.
+
+- name: expansion_manager_operations
+  rules:
+  - alert: ExpansionHandoverSLABreach
+    expr: expansion_handover_duration_hours{target_role="regional_manager"} > 720  # 30 days
+    for: 15m
+    labels:
+      severity: warning
+      team: operations
+      service: expansion-ops
+    annotations:
+      summary: "⚠️ Expansion handover SLA breach"
+      description: |
+        Region {{ $labels.region_id }} has been in pilot state for over 30 days without handover
+        
+        Current Duration: {{ $value }} hours
+        SLA: 720 hours (30 days)
+        Expansion Manager: {{ $labels.expansion_user_id }}
+        
+        Escalation required to ensure timely regional manager handover.
+      runbook_url: "https://ops.xpress.ph/runbooks/expansion-handover-sla"
+      
+  - alert: DualControlApprovalBacklog
+    expr: sum(dual_control_approvals_total{approval_status="pending"}) > 10
+    for: 10m  
+    labels:
+      severity: warning
+      team: operations
+      service: expansion-ops
+    annotations:
+      summary: "⚠️ Dual-control approval backlog detected"
+      description: |
+        {{ $value }} dual-control approvals are pending
+        
+        This may indicate approval workflow bottlenecks or missing approvers.
+        
+        Pending workflows:
+        - Prelaunch pricing configurations
+        - Region promotion requests
+        - Supply campaign approvals
+      
+  - alert: RegionPromotionStalled
+    expr: |
+      (
+        time() - dual_control_approvals_last_activity_timestamp{workflow_type="region_promotion"}
+      ) / 3600 > 48  # 48 hours
+    for: 5m
+    labels:
+      severity: warning 
+      team: operations
+      service: expansion-ops
+    annotations:
+      summary: "⚠️ Region promotion workflow stalled"
+      description: |
+        Region promotion for {{ $labels.region_id }} has been stalled for {{ $value }} hours
+        
+        Last Activity: {{ $labels.last_approver }}
+        Workflow Status: {{ $labels.approval_status }}
+        
+        Manual intervention may be required.
+
+- name: expansion_manager_compliance
+  rules:
+  - alert: VendorDataAccessWithoutJustification
+    expr: increase(expansion_operations_total{action="view_vendor_pipeline", justification=""}[1h]) > 0
+    for: 0m
+    labels:
+      severity: warning
+      team: compliance
+      service: expansion-ops
+    annotations:
+      summary: "⚠️ Vendor data access without proper justification"  
+      description: |
+        expansion_manager accessed vendor data without providing justification
+        
+        User: {{ $labels.user_id }}
+        Region: {{ $labels.region_id }}
+        
+        NPC compliance requires business justification for vendor data access.
+        
+  - alert: ExpansionOperationsOutsideBusinessHours
+    expr: |
+      (
+        expansion_operations_total{action=~"promote_region_stage|configure_prelaunch_pricing_flagged"}
+        and on() (hour() < 8 or hour() > 18)
+      ) > 0
+    for: 0m
+    labels:
+      severity: info
+      team: compliance
+      service: expansion-ops  
+    annotations:
+      summary: "ℹ️ Expansion operations outside business hours"
+      description: |
+        Critical expansion operations performed outside 8AM-6PM business hours
+        
+        Action: {{ $labels.action }}
+        User: {{ $labels.user_id }}
+        Time: {{ $labels.timestamp }}
+        
+        Audit trail review recommended for compliance purposes.
+
+# Alertmanager routing configuration
+# route:
+#   group_by: ['alertname', 'cluster', 'service']
+#   group_wait: 10s
+#   group_interval: 10s  
+#   repeat_interval: 1h
+#   receiver: 'expansion-alerts'
+#   routes:
+#   - match:
+#       severity: critical
+#       role: expansion_manager  
+#     receiver: 'security-team-pager'
+#     group_wait: 0s
+#     repeat_interval: 5m
+#   - match:
+#       team: compliance
+#     receiver: 'compliance-team-slack'
+#     
+# receivers:
+# - name: 'expansion-alerts'
+#   slack_configs:
+#   - api_url: '${SLACK_WEBHOOK_URL}'
+#     channel: '#expansion-ops-alerts'
+#     title: 'Expansion Manager Alert'
+#     text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+#
+# - name: 'security-team-pager' 
+#   pagerduty_configs:
+#   - routing_key: '${PAGERDUTY_EXPANSION_KEY}'
+#     description: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'

@@ -25,13 +25,13 @@ import {
   Check,
   Brain
 } from 'lucide-react';
+import { useNotifications } from '@/contexts/NotificationContext';
+import { useNotificationData } from '@/hooks/useNotificationData';
 
 interface NavigationItem {
   id: string;
   label: string;
   icon: React.ElementType;
-  badge?: number | string;
-  badgeColor?: 'green' | 'yellow' | 'red' | 'blue' | 'purple';
   active?: boolean;
   description?: string;
   tabs?: string[];
@@ -74,6 +74,10 @@ export const RidesharingSidebar: React.FC<RidesharingSidebarProps> = ({
   ]);
   const router = useRouter();
   const pathname = usePathname();
+  const { getBadge, markAsViewed } = useNotifications();
+  
+  // Initialize notification data
+  useNotificationData();
 
   // Get current active item from pathname
   const getCurrentActiveItem = () => {
@@ -93,8 +97,6 @@ export const RidesharingSidebar: React.FC<RidesharingSidebarProps> = ({
       id: 'live-map',
       icon: MapPin,
       description: 'Real-time tracking',
-      badge: 'LIVE',
-      badgeColor: 'green',
       tabs: ['Map View', 'Driver Locations', 'Trip Routes', 'Heatmap']
     },
     Regions: {
@@ -103,36 +105,22 @@ export const RidesharingSidebar: React.FC<RidesharingSidebarProps> = ({
       description: 'Regional management',
       tabs: ['Region Directory', 'Add New Region', 'Coverage Maps', 'Analytics']
     },
-    Expansion: {
-      id: 'expansion',
-      icon: MapPin,
-      description: 'AI-powered expansion strategy',
-      badge: 'AI',
-      badgeColor: 'purple',
-      tabs: ['Overview', 'Primary Product', 'Secondary Products', 'AI Insights', 'Investment', 'Performance']
-    },
     'Nexus AI': {
-      id: 'nexus',
+      id: 'ai-expansions',
       icon: Brain,
-      description: 'AI/ML Hub with Dual Approvals',
-      badge: 'v1.0',
-      badgeColor: 'purple',
-      tabs: ['Overview', 'Recommendations', 'Forecasts', 'Scenario Builder', 'Cross-Domain', 'Risk & Compliance', 'Ops (AI)', 'Audit & Governance', 'Knowledge']
+      description: 'AI-powered expansion strategy',
+      tabs: ['Overview', 'Regional AI', 'AI Recommendations', 'Model Operations', 'Market Expansion', 'Insights & Analytics']
     },
     Bookings: {
       id: 'bookings',
       icon: Car,
       description: 'Trip management',
-      badge: 142,
-      badgeColor: 'blue',
       tabs: ['Active Trips', 'Completed', 'Cancelled', 'Scheduled']
     },
     Drivers: {
       id: 'drivers',
       icon: Users,
       description: 'Airtable-style',
-      badge: 2000,
-      badgeColor: 'green',
       tabs: ['Active Drivers', 'Pending Drivers', 'Suspended Drivers', 'Banned Drivers']
     },
     Passengers: {
@@ -145,24 +133,18 @@ export const RidesharingSidebar: React.FC<RidesharingSidebarProps> = ({
       id: 'safety',
       icon: Shield,
       description: 'All-time data',
-      badge: 'NEW',
-      badgeColor: 'purple',
       tabs: ['Overview', 'Alerts', 'Reports']
     },
     'Fraud Protect': {
       id: 'fraud-protect',
       icon: AlertTriangle,
       description: 'Advanced detection',
-      badge: 47,
-      badgeColor: 'red',
       tabs: ['Overview', 'Active Alerts', 'Patterns', 'Settings']
     },
     Pricing: {
       id: 'pricing',
       icon: DollarSign,
       description: 'Fares management',
-      badge: 'NEW',
-      badgeColor: 'blue',
       tabs: ['Pricing Profiles', 'TNVS Fares', 'Taxi Fares', 'Surge Control', 'Tolls']
     },
     Reports: {
@@ -170,6 +152,12 @@ export const RidesharingSidebar: React.FC<RidesharingSidebarProps> = ({
       icon: BarChart3,
       description: 'Business intelligence',
       tabs: ['Operations', 'Financial', 'Performance', 'Promos', 'Incentives']
+    },
+    Vehicles: {
+      id: 'vehicles',
+      icon: Car,
+      description: 'Fleet management',
+      tabs: ['Fleet Overview', 'Vehicle Details', 'Maintenance', 'Assignments', 'Compliance', 'Telematics']
     },
     Settings: {
       id: 'settings',
@@ -187,8 +175,6 @@ export const RidesharingSidebar: React.FC<RidesharingSidebarProps> = ({
     label: section,
     icon: config.icon,
     description: config.description,
-    badge: config.badge,
-    badgeColor: config.badgeColor as any,
     tabs: config.tabs,
     active: getCurrentActiveItem() === config.id
   }));
@@ -198,8 +184,6 @@ export const RidesharingSidebar: React.FC<RidesharingSidebarProps> = ({
     label: section,
     icon: config.icon,
     description: config.description,
-    badge: config.badge,
-    badgeColor: config.badgeColor as any,
     tabs: config.tabs,
     active: getCurrentActiveItem() === config.id
   }));
@@ -207,6 +191,9 @@ export const RidesharingSidebar: React.FC<RidesharingSidebarProps> = ({
   const bottomItems: NavigationItem[] = [];
 
   const handleItemClick = (itemId: string, section: string) => {
+    // Mark as viewed to remove 'NEW' badges
+    markAsViewed(itemId);
+    
     // Use Next.js router for navigation
     if (itemId === 'dashboard') {
       router.push('/dashboard');
@@ -246,6 +233,7 @@ export const RidesharingSidebar: React.FC<RidesharingSidebarProps> = ({
     const Icon = item.icon;
     const isHovered = hoveredItem === item.id;
     const showTooltip = collapsed && isHovered;
+    const badge = getBadge(item.id);
 
     return (
       <div key={item.id} className="relative">
@@ -280,17 +268,25 @@ export const RidesharingSidebar: React.FC<RidesharingSidebarProps> = ({
                   <div className="text-xs text-gray-400">{item.description}</div>
                 )}
               </div>
-              {item.badge && (
-                <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${getBadgeColor(item.badgeColor)}`}>
-                  {item.badge}
+              {badge && (
+                <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${getBadgeColor(badge.color)}`}>
+                  {badge.type === 'live' ? (
+                    <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                  ) : (
+                    badge.value
+                  )}
                 </span>
               )}
             </>
           )}
 
-          {collapsed && item.badge && (
-            <span className={`absolute -top-1 -right-1 px-1.5 py-0.5 rounded-full text-xs font-bold ${getBadgeColor(item.badgeColor)}`}>
-              {typeof item.badge === 'number' && item.badge > 99 ? '99+' : item.badge}
+          {collapsed && badge && (
+            <span className={`absolute -top-1 -right-1 px-1.5 py-0.5 rounded-full text-xs font-bold ${getBadgeColor(badge.color)}`}>
+              {badge.type === 'live' ? (
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+              ) : (
+                typeof badge.value === 'number' && badge.value > 99 ? '99+' : badge.value
+              )}
             </span>
           )}
         </button>
@@ -300,9 +296,13 @@ export const RidesharingSidebar: React.FC<RidesharingSidebarProps> = ({
           <div className="absolute left-full top-1/2 transform -translate-y-1/2 ml-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg shadow-lg z-50 whitespace-nowrap">
             <div className="font-medium">{item.label}</div>
             {item.description && <div className="text-xs text-gray-300">{item.description}</div>}
-            {item.badge && (
-              <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold ${getBadgeColor(item.badgeColor)}`}>
-                {item.badge}
+            {badge && (
+              <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold ${getBadgeColor(badge.color)}`}>
+                {badge.type === 'live' ? (
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                ) : (
+                  badge.value
+                )}
               </span>
             )}
             <div className="absolute right-full top-1/2 transform -translate-y-1/2">

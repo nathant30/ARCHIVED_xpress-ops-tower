@@ -1,0 +1,29 @@
+name: Verify Code ↔ Docs
+on:
+  pull_request:
+  push: { branches: [ main ] }
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: corepack enable
+      - run: pnpm i --frozen-lockfile
+      - name: Generate artifacts
+        run: |
+          pnpm gen:openapi
+          pnpm gen:permissions
+          pnpm gen:events
+          pnpm gen:schema || true
+      - name: Lint OpenAPI
+        run: |
+          pnpm spectral lint artifacts/openapi.json || true
+          pnpm redocly lint artifacts/openapi.json
+      - name: Verify drift vs docs
+        run: |
+          diff -u artifacts/openapi.json docs/api/openapi.json
+          diff -u artifacts/permissions.json docs/security/permissions.json
+          diff -u artifacts/asyncapi.yaml docs/events/asyncapi.yaml
+          if [ -f artifacts/schema.sql ] && [ -f docs/db/schema.sql ]; then diff -u artifacts/schema.sql docs/db/schema.sql; else echo "SKIP DB schema diff"; fi

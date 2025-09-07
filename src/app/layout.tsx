@@ -6,6 +6,7 @@ import AppLayout from '@/components/AppLayout';
 import { ServiceTypeProvider } from '@/contexts/ServiceTypeContext';
 import { EnhancedAuthProvider } from '@/hooks/useEnhancedAuth';
 import { RBACProvider } from '@/hooks/useRBAC';
+import { NotificationProvider } from '@/contexts/NotificationContext';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -84,9 +85,11 @@ export default function RootLayout({
         <RBACProvider>
           <EnhancedAuthProvider>
             <ServiceTypeProvider>
-              <AppLayout>
-                {children}
-              </AppLayout>
+              <NotificationProvider>
+                <AppLayout>
+                  {children}
+                </AppLayout>
+              </NotificationProvider>
             </ServiceTypeProvider>
           </EnhancedAuthProvider>
         </RBACProvider>

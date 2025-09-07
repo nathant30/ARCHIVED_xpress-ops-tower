@@ -72,7 +72,7 @@ export async function GET(
       SELECT id, region_id as regionId, access_level as accessLevel, 
              starts_at as startsAt, ends_at as endsAt, reason, created_by as createdBy
       FROM region_access_overrides
-      WHERE user_id = $1 AND datetime('now') BETWEEN starts_at AND ends_at
+      WHERE user_id = $1 AND NOW() BETWEEN starts_at AND ends_at
       ORDER BY ends_at ASC
     `, [userId]);
     const overrides = overridesResult.rows;
@@ -144,9 +144,9 @@ export async function PUT(
         for (const grant of grants) {
           await txQuery(`
             INSERT INTO regional_user_access (user_id, region_id, access_level, granted_at)
-            VALUES ($1, $2, $3, datetime('now'))
+            VALUES ($1, $2, $3, NOW())
             ON CONFLICT (user_id, region_id) 
-            DO UPDATE SET access_level = $3, granted_at = datetime('now')
+            DO UPDATE SET access_level = $3, granted_at = NOW()
           `, [userId, grant.regionId, grant.accessLevel]);
         }
       }

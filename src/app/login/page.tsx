@@ -244,10 +244,19 @@ function LoginPageContent() {
           {/* Demo Credentials */}
           <div className="mt-6 p-4 bg-gray-50 rounded-lg">
             <p className="text-xs text-gray-600 font-medium mb-2">Demo Credentials:</p>
-            <div className="text-xs text-gray-500 space-y-1">
-              <p><strong>Email:</strong> admin@xpress.ops</p>
-              <p><strong>Password:</strong> demo123</p>
-              <p className="text-gray-400">Use these credentials to access the demo environment</p>
+            <div className="text-xs text-gray-500 space-y-2">
+              <div className="p-2 bg-red-50 border border-red-200 rounded">
+                <p className="text-red-700 font-medium">🔥 Super Admin (God Mode)</p>
+                <p><strong>Email:</strong> superadmin@xpress.ops</p>
+                <p><strong>Password:</strong> godmode123</p>
+                <p className="text-red-500 text-xs">Full system access, all permissions</p>
+              </div>
+              <div className="p-2 bg-blue-50 border border-blue-200 rounded">
+                <p className="text-blue-700 font-medium">Regular Admin</p>
+                <p><strong>Email:</strong> admin@xpress.ops</p>
+                <p><strong>Password:</strong> demo123</p>
+                <p className="text-blue-500 text-xs">Standard admin permissions</p>
+              </div>
             </div>
           </div>
         </div>

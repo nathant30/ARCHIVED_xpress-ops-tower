@@ -1,0 +1,14 @@
+{
+  "permissions": [
+    "rides.view",
+    "rides.edit",
+    "pricing.configure",
+    "fraud.review",
+    "operators.manage",
+    "users.manage",
+    "compliance.view",
+    "compliance.edit",
+    "query_curated_views",
+    "view_ops_kpis_masked"
+  ]
+}

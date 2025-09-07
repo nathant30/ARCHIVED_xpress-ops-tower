@@ -1,0 +1,353 @@
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: vehicle-management-gateway
+  namespace: ops-tower
+  labels:
+    app: vehicle-management
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      credentialName: ops-tower-tls
+    hosts:
+    - "vehicle-api.ops-tower.local"
+    - "fleet.ops-tower.local"
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "vehicle-api.ops-tower.local"
+    - "fleet.ops-tower.local"
+    tls:
+      httpsRedirect: true
+---
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: vehicle-external-services
+  namespace: ops-tower
+spec:
+  hosts:
+  - obd-telemetrics.external.com
+  ports:
+  - number: 443
+    name: https
+    protocol: HTTPS
+  location: MESH_EXTERNAL
+  resolution: DNS
+---
+# Vehicle Management Service Mesh Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vehicle-service-mesh-config
+  namespace: ops-tower
+  labels:
+    app: vehicle-management
+    component: service-mesh
+data:
+  envoy-config.yaml: |
+    admin:
+      access_log_path: /tmp/admin_access.log
+      address:
+        socket_address:
+          protocol: TCP
+          address: 127.0.0.1
+          port_value: 9901
+    static_resources:
+      listeners:
+      - name: vehicle_listener
+        address:
+          socket_address:
+            protocol: TCP
+            address: 0.0.0.0
+            port_value: 10000
+        filter_chains:
+        - filters:
+          - name: envoy.filters.network.http_connection_manager
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+              scheme_header_transformation:
+                scheme_to_overwrite: https
+              stat_prefix: ingress_http
+              route_config:
+                name: local_route
+                virtual_hosts:
+                - name: local_service
+                  domains: ["*"]
+                  routes:
+                  - match:
+                      prefix: "/api/vehicles"
+                    route:
+                      cluster: vehicle_management_service
+                      timeout: 30s
+                  - match:
+                      prefix: "/health"
+                    route:
+                      cluster: vehicle_management_service
+                      timeout: 5s
+              http_filters:
+              - name: envoy.filters.http.router
+      clusters:
+      - name: vehicle_management_service
+        connect_timeout: 5s
+        type: LOGICAL_DNS
+        dns_lookup_family: V4_ONLY
+        lb_policy: ROUND_ROBIN
+        load_assignment:
+          cluster_name: vehicle_management_service
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: vehicle-management-service
+                    port_value: 80
+  telemetry-config.yaml: |
+    defaultProviders:
+      metrics:
+      - prometheus
+      traces:
+      - jaeger
+      accessLogging:
+      - envoy
+    providers:
+      metrics:
+        prometheus:
+          configOverride:
+            metric_relabeling_configs:
+            - source_labels: [__name__]
+              regex: istio_.*
+              target_label: __tmp_istio_name
+            - source_labels: [__tmp_istio_name]
+              regex: (.+)
+              target_label: __name__
+              replacement: vehicle_${1}
+      traces:
+        jaeger:
+          service: "vehicle-management.ops-tower.svc.cluster.local"
+          disable_span_reporting: false
+      accessLogging:
+        envoy:
+          providers:
+            envoy:
+              service: envoy-als.istio-system.svc.cluster.local
+              port: 9001
+---
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  name: vehicle-management-istio-config
+  namespace: istio-system
+spec:
+  values:
+    pilot:
+      traceSampling: 1.0
+    global:
+      meshID: ops-tower-mesh
+      multiCluster:
+        clusterName: ops-tower-main
+      network: ops-tower-network
+  components:
+    pilot:
+      k8s:
+        resources:
+          requests:
+            cpu: 200m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        env:
+        - name: PILOT_TRACE_SAMPLING
+          value: "1.0"
+        - name: PILOT_ENABLE_WORKLOAD_ENTRY_AUTOREGISTRATION
+          value: "true"
+    ingressGateways:
+    - name: istio-ingressgateway
+      k8s:
+        service:
+          loadBalancerIP: 10.0.1.10
+          type: LoadBalancer
+          ports:
+          - port: 15021
+            targetPort: 15021
+            name: status-port
+          - port: 80
+            targetPort: 8080
+            name: http2
+          - port: 443
+            targetPort: 8443
+            name: https
+          - port: 31400
+            targetPort: 31400
+            name: tcp
+          - port: 15443
+            targetPort: 15443
+            name: tls
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 2000m
+            memory: 1024Mi
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: vehicle-management-lua-filter
+  namespace: ops-tower
+spec:
+  workloadSelector:
+    labels:
+      app: vehicle-management
+  configPatches:
+  - applyTo: HTTP_FILTER
+    match:
+      context: SIDECAR_INBOUND
+      listener:
+        filterChain:
+          filter:
+            name: "envoy.filters.network.http_connection_manager"
+    patch:
+      operation: INSERT_BEFORE
+      value:
+        name: envoy.filters.http.lua
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+          inline_code: |
+            function envoy_on_request(request_handle)
+              -- Add vehicle-specific headers
+              local vehicle_id = request_handle:headers():get("x-vehicle-id")
+              local region_id = request_handle:headers():get("x-region-id")
+              
+              if vehicle_id then
+                request_handle:headers():add("x-service-context", "vehicle-management")
+                request_handle:headers():add("x-trace-vehicle", vehicle_id)
+              end
+              
+              if region_id then
+                request_handle:headers():add("x-region-context", region_id)
+              end
+              
+              -- Log vehicle requests for monitoring
+              request_handle:logInfo("Vehicle API request: " .. (vehicle_id or "unknown"))
+            end
+            
+            function envoy_on_response(response_handle)
+              -- Add vehicle-specific response headers
+              response_handle:headers():add("x-vehicle-service", "ops-tower-fleet")
+              response_handle:headers():add("x-response-time", os.time())
+            end
+---
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: vehicle-management-telemetry
+  namespace: ops-tower
+spec:
+  selector:
+    matchLabels:
+      app: vehicle-management
+  metrics:
+  - providers:
+    - name: prometheus
+  - overrides:
+    - match:
+        metric: ALL_METRICS
+      tagOverrides:
+        vehicle_id:
+          value: "%{REQUEST_HEADER(x-vehicle-id):=unknown}"
+        region_id:
+          value: "%{REQUEST_HEADER(x-region-id):=unknown}"
+        service_name:
+          value: "vehicle-management"
+  accessLogging:
+  - providers:
+    - name: otel
+  tracing:
+  - providers:
+    - name: jaeger
+  - customTags:
+      vehicle_id:
+        header:
+          name: x-vehicle-id
+      region_id:
+        header:
+          name: x-region-id
+      request_type:
+        header:
+          name: x-request-type
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Sidecar
+metadata:
+  name: vehicle-management-sidecar
+  namespace: ops-tower
+spec:
+  workloadSelector:
+    labels:
+      app: vehicle-management
+  egress:
+  - port:
+      number: 5432
+      name: postgres
+      protocol: TCP
+    hosts:
+    - "./postgres-primary.database.svc.cluster.local"
+    - "./postgres-replica.database.svc.cluster.local"
+  - port:
+      number: 6379
+      name: redis
+      protocol: TCP
+    hosts:
+    - "./redis-cluster-*.cache.svc.cluster.local"
+  - port:
+      number: 8086
+      name: influxdb
+      protocol: TCP
+    hosts:
+    - "./influxdb.telemetrics.svc.cluster.local"
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "./driver-service.ops-tower.svc.cluster.local"
+    - "./booking-service.ops-tower.svc.cluster.local"
+    - "./notification-service.ops-tower.svc.cluster.local"
+    - "./pricing-service.ops-tower.svc.cluster.local"
+  - port:
+      number: 443
+      name: external-https
+      protocol: HTTPS
+    hosts:
+    - "obd-telemetrics.external.com"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vehicle-management-headless
+  namespace: ops-tower
+  labels:
+    app: vehicle-management
+    service.istio.io/canonical-name: vehicle-management
+    service.istio.io/canonical-revision: v1
+spec:
+  clusterIP: None
+  ports:
+  - port: 3000
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: vehicle-management

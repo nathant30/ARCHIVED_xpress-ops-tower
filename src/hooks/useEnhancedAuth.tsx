@@ -108,6 +108,41 @@ export function EnhancedAuthProvider({ children }: { children: ReactNode }) {
 
   const initializeAuth = async (): Promise<void> => {
     try {
+      // DEVELOPMENT MODE: Provide mock authentication
+      if (process.env.NODE_ENV === 'development') {
+        const mockUser: EnhancedUser = {
+          id: 'demo-admin-001',
+          email: 'admin@xpressops.demo',
+          name: 'Demo Admin',
+          roles: ['super_admin', 'platform_admin'],
+          permissions: ['*'], // All permissions
+          allowedRegions: ['*'], // All regions
+          piiScope: 'unrestricted',
+          status: 'active',
+          mfaEnabled: false,
+          lastLoginAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+
+        setAuthState({
+          user: mockUser,
+          isAuthenticated: true,
+          isLoading: false,
+          error: null,
+          sessionExpiry: Date.now() + 24 * 60 * 60 * 1000, // 24 hours from now
+          mfaRequired: false
+        });
+
+        logger.info('Development auth initialized with mock user', {
+          userId: mockUser.id,
+          permissions: 'all',
+          regions: 'all'
+        });
+        
+        return;
+      }
+
       const token = localStorage.getItem(TOKEN_KEY);
       if (!token) {
         setAuthState(prev => ({ ...prev, isLoading: false }));

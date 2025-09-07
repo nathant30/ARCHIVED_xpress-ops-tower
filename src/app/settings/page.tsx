@@ -9,7 +9,8 @@ import {
   Users, 
   Key, 
   FileText,
-  Activity
+  Activity,
+  Palette
 } from 'lucide-react';
 
 // Import our extracted components
@@ -19,6 +20,7 @@ import APIManagementPanel from '@/components/settings/APIManagementPanel';
 import SecurityPanel from '@/components/settings/SecurityPanel';
 import NotificationsPanel from '@/components/settings/NotificationsPanel';
 import AuditPanel from '@/components/settings/AuditPanel';
+import UIReferencePanel from '@/components/settings/UIReferencePanel';
 import { RegionAccessDrawer } from '@/components/RegionAccessDrawer';
 
 // Import production logger
@@ -409,7 +411,8 @@ const SettingsPage = () => {
     { id: 'security', label: 'Security', icon: Shield },
     { id: 'monitoring', label: 'Monitoring', icon: Activity },
     { id: 'notifications', label: 'Notifications', icon: Bell },
-    { id: 'audit', label: 'Audit & Compliance', icon: FileText }
+    { id: 'audit', label: 'Audit & Compliance', icon: FileText },
+    { id: 'ui-reference', label: 'UI Reference', icon: Palette }
   ];
 
   // Event handlers
@@ -915,6 +918,11 @@ const SettingsPage = () => {
             onDeleteExport={handleDeleteExport}
             onViewLogDetails={handleViewLogDetails}
           />
+        );
+
+      case 'ui-reference':
+        return (
+          <UIReferencePanel />
         );
 
       default:

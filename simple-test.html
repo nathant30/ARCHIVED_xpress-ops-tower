@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple Google Maps Test</title>
+    <style>
+        #map { height: 400px; width: 100%; }
+        body { font-family: Arial, sans-serif; margin: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Simple Test - New API Key</h1>
+    <div id="map"></div>
+    
+    <script>
+        function initMap() {
+            console.log('Google Maps loaded!');
+            const map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 11,
+                center: { lat: 14.5995, lng: 120.9842 }
+            });
+            
+            new google.maps.Marker({
+                position: { lat: 14.5995, lng: 120.9842 },
+                map: map,
+                title: 'Test marker'
+            });
+            
+            alert('Google Maps working!');
+        }
+        
+        function handleError() {
+            console.error('Google Maps failed to load');
+            alert('Google Maps failed to load');
+        }
+    </script>
+    
+    <script async defer 
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCvA59SPvyOeSKPI4y6r-AL97gn1Fq-v-c&callback=initMap"
+        onerror="handleError()">
+    </script>
+</body>
+</html>

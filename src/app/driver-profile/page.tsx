@@ -1,10 +1,10 @@
 'use client';
 
 import React from 'react';
-import RedesignedDriverProfile from '@/components/features/RedesignedDriverProfile';
+import XpressDriverProfile2025 from '@/components/driver/XpressDriverProfile2025';
 
 const DriverProfilePage = () => {
-  return <RedesignedDriverProfile />;
+  return <XpressDriverProfile2025 />;
 };
 
 export default DriverProfilePage;

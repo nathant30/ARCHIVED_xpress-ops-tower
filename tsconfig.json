@@ -58,6 +58,12 @@
     ".next",
     "out",
     "database/**/*",
-    "scripts/**/*.js"
+    "scripts/**/*.js",
+    "deployment/**/*",
+    "**/*.stories.tsx",
+    "**/*.stories.ts",
+    "**/*.stories.jsx",
+    "**/*.stories.js",
+    "apps/**"
   ]
 }

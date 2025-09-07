@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Google Maps API Key Test</title>
+    <style>
+        #map { height: 400px; width: 100%; }
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .info { background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Google Maps API Key Test</h1>
+    <div class="info">
+        <strong>API Key:</strong> AIzaSyBlVH5zLYBzZxizy4wCo_a3sOZC-UvWP5M
+    </div>
+    <div class="info">
+        <strong>Testing:</strong> Basic Google Maps initialization
+    </div>
+    <div id="map"></div>
+    
+    <script>
+        function initMap() {
+            console.log('Google Maps loaded successfully!');
+            const map = new google.maps.Map(document.getElementById("map"), {
+                zoom: 11,
+                center: { lat: 14.5995, lng: 120.9842 }, // Manila
+            });
+            
+            // Add a marker
+            new google.maps.Marker({
+                position: { lat: 14.5995, lng: 120.9842 },
+                map: map,
+                title: "Manila - API Key Test"
+            });
+        }
+        
+        function handleError() {
+            console.error('Failed to load Google Maps API');
+            document.getElementById('map').innerHTML = 
+                '<div style="padding: 20px; background: #ffebee; border: 1px solid #f44336; color: #c62828;">' +
+                '<strong>Error:</strong> Failed to load Google Maps. Check the API key and restrictions.' +
+                '</div>';
+        }
+    </script>
+    
+    <script async defer 
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBlVH5zLYBzZxizy4wCo_a3sOZC-UvWP5M&callback=initMap&v=weekly&libraries=visualization,marker,geometry"
+        onerror="handleError()">
+    </script>
+    
+    <!-- Debug Network Issues -->
+    <script>
+        console.log('Testing Google Maps API key...');
+        fetch('https://maps.googleapis.com/maps/api/js?key=AIzaSyBlVH5zLYBzZxizy4wCo_a3sOZC-UvWP5M')
+            .then(response => {
+                console.log('API Response Status:', response.status);
+                return response.text();
+            })
+            .then(data => {
+                console.log('API Response (first 200 chars):', data.substring(0, 200));
+            })
+            .catch(error => {
+                console.error('API Fetch Error:', error);
+            });
+    </script>
+</body>
+</html>

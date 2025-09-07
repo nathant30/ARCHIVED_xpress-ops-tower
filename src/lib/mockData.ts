@@ -150,6 +150,30 @@ export const mockRegions: Region[] = [
 // Mock users data for authentication
 export const mockUsers = [
   {
+    id: 'usr-superadmin',
+    email: 'superadmin@xpress.ops',
+    firstName: 'Super',
+    lastName: 'Admin',
+    role: 'superadmin',
+    password: '$2a$12$qzEJtH8K8aFxWB5PNZOz6OgI1mLm6InJnbVKLzaERGUw1UJ0Dq1cm', // password: "godmode123"
+    regionId: '*', // Global access
+    permissions: [
+      'query_curated_views',
+      'view_ops_kpis_masked', 
+      'view_ops_kpis_full',
+      'manage_users',
+      'view_audit_logs',
+      'manage_regions',
+      'access_all_data',
+      'modify_system_settings'
+    ], // Super admin permissions
+    mfaEnabled: false,
+    isActive: true,
+    lastLogin: null,
+    createdAt: new Date('2024-01-01'),
+    updatedAt: new Date('2024-08-29'),
+  },
+  {
     id: 'usr-demo',
     email: 'admin@xpress.ops',
     firstName: 'Demo',

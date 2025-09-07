@@ -44,7 +44,6 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const db = getDb();
     
     const {
       profile_id,
@@ -69,41 +68,65 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if fare already exists for this profile
-    const existing = db.prepare(
-      'SELECT id FROM taxi_fares WHERE profile_id = ?'
-    ).get(profile_id);
-
-    if (existing) {
-      // Update existing fare
-      db.prepare(`
-        UPDATE taxi_fares 
-        SET flagdown = ?, per_km = ?, per_min = ?, night_surcharge_pct = ?, airport_surcharge = ?,
-            event_surcharge = ?, holiday_surcharge = ?, xpress_booking_fee_flat = ?, 
-            xpress_booking_fee_pct = ?, ltfrb_compliant = ?, surge_blocked = ?, other_surcharges = ?
-        WHERE id = ?
-      `).run(flagdown, per_km, per_min, night_surcharge_pct, airport_surcharge, event_surcharge, 
-             holiday_surcharge, xpress_booking_fee_flat, xpress_booking_fee_pct, ltfrb_compliant, 
-             surge_blocked, other_surcharges, existing.id);
+    const result = await new Promise<any>((resolve, reject) => {
+      const db = new sqlite3.Database(DB_PATH);
       
-      return NextResponse.json({ message: 'Taxi fare updated successfully' });
-    } else {
-      // Create new fare
-      const result = db.prepare(`
-        INSERT INTO taxi_fares (
-          profile_id, flagdown, per_km, per_min, night_surcharge_pct, airport_surcharge,
-          event_surcharge, holiday_surcharge, xpress_booking_fee_flat, xpress_booking_fee_pct,
-          ltfrb_compliant, surge_blocked, other_surcharges
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(profile_id, flagdown, per_km, per_min, night_surcharge_pct, airport_surcharge, 
-             event_surcharge, holiday_surcharge, xpress_booking_fee_flat, xpress_booking_fee_pct,
-             ltfrb_compliant, surge_blocked, other_surcharges);
+      // Check if fare already exists for this profile
+      db.get(
+        'SELECT id FROM taxi_fares WHERE profile_id = ?',
+        [profile_id],
+        (err, existing) => {
+          if (err) {
+            db.close();
+            reject(err);
+            return;
+          }
+          
+          if (existing) {
+            // Update existing fare
+            db.run(`
+              UPDATE taxi_fares 
+              SET flagdown = ?, per_km = ?, per_min = ?, night_surcharge_pct = ?, airport_surcharge = ?,
+                  event_surcharge = ?, holiday_surcharge = ?, xpress_booking_fee_flat = ?, 
+                  xpress_booking_fee_pct = ?, ltfrb_compliant = ?, surge_blocked = ?, other_surcharges = ?
+              WHERE id = ?
+            `, [flagdown, per_km, per_min, night_surcharge_pct, airport_surcharge, event_surcharge, 
+                holiday_surcharge, xpress_booking_fee_flat, xpress_booking_fee_pct, ltfrb_compliant, 
+                surge_blocked, other_surcharges, existing.id], (err) => {
+              db.close();
+              if (err) {
+                reject(err);
+              } else {
+                resolve({ message: 'Taxi fare updated successfully' });
+              }
+            });
+          } else {
+            // Create new fare
+            db.run(`
+              INSERT INTO taxi_fares (
+                profile_id, flagdown, per_km, per_min, night_surcharge_pct, airport_surcharge,
+                event_surcharge, holiday_surcharge, xpress_booking_fee_flat, xpress_booking_fee_pct,
+                ltfrb_compliant, surge_blocked, other_surcharges
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `, [profile_id, flagdown, per_km, per_min, night_surcharge_pct, airport_surcharge, 
+                event_surcharge, holiday_surcharge, xpress_booking_fee_flat, xpress_booking_fee_pct,
+                ltfrb_compliant, surge_blocked, other_surcharges], function(err) {
+              db.close();
+              if (err) {
+                reject(err);
+              } else {
+                resolve({
+                  id: this.lastID,
+                  message: 'Taxi fare created successfully'
+                });
+              }
+            });
+          }
+        }
+      );
+    });
 
-      return NextResponse.json({
-        id: result.lastInsertRowid,
-        message: 'Taxi fare created successfully'
-      }, { status: 201 });
-    }
+    return NextResponse.json(result, { status: result.id ? 201 : 200 });
 
   } catch (error) {
     console.error('Taxi fares POST error:', error);

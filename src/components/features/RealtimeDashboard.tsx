@@ -14,7 +14,8 @@ import { XpressCard as Card, Button, Badge } from '@/components/xpress';
 import { useEnhancedAuth } from '@/hooks/useEnhancedAuth';
 import { sanitizeInput } from '@/lib/security/inputSanitizer';
 import { PermissionButton, usePermissionCheck } from '@/hooks/useRBAC';
-import { auditLogger } from '@/lib/security/auditLogger';
+// Note: auditLogger should only be used on server-side
+// import { auditLogger } from '@/lib/security/auditLogger';
 import { RealTimeMap } from './RealTimeMap';
 import { SystemStatusMonitor } from './SystemStatusMonitor';
 import { useRealtimeDashboard } from '@/hooks/useRealtimeDashboard';
@@ -79,10 +80,11 @@ export const RealtimeDashboard: React.FC<DashboardProps> = ({
   // Security: Sanitize regionId input
   const sanitizedRegionId = sanitizeInput(regionId || 'metro_manila');
   
-  // Security: Audit dashboard access
+  // Security: Audit dashboard access (client-side logging)
   useEffect(() => {
     if (isAuthenticated && user) {
-      auditLogger.logDashboardAccess({
+      // Client-side audit logging (for development - server-side should handle production logging)
+      console.log('Dashboard access audit:', {
         userId: user.id,
         regionId: sanitizedRegionId,
         permissions: userPermissions,

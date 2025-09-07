@@ -7,13 +7,19 @@
       "manage_queue",
       "contact_passenger_masked",
       "view_trip_basic",
-      "update_trip_status"
+      "update_trip_status",
+      "view_vehicles_basic",
+      "assign_driver_to_vehicle",
+      "update_vehicle_status_basic"
     ],
     "ops_monitor": [
       "view_live_map",
       "view_fleet_status",
       "view_trip_basic",
-      "view_metrics_basic"
+      "view_metrics_basic",
+      "view_vehicles_basic",
+      "view_vehicle_dashboard",
+      "view_vehicle_telemetry_basic"
     ],
     "ops_manager": [
       "assign_driver",
@@ -29,7 +35,15 @@
       "manage_shift_schedules",
       "approve_overtime",
       "view_driver_performance",
-      "assign_vehicle"
+      "assign_vehicle",
+      "view_vehicles_detailed",
+      "view_vehicle_dashboard",
+      "update_vehicle_details",
+      "schedule_vehicle_maintenance",
+      "approve_vehicle_assignments",
+      "view_vehicle_telemetry_detailed",
+      "manage_vehicle_compliance",
+      "create_vehicle_reports"
     ],
     "support": [
       "case_open",
@@ -41,14 +55,23 @@
       "issue_refund_small",
       "escalate_to_manager",
       "view_payment_history",
-      "cross_region_override"
+      "cross_region_override",
+      "view_vehicles_support",
+      "access_vehicle_incident_reports",
+      "update_vehicle_support_notes",
+      "view_vehicle_maintenance_history"
     ],
     "analyst": [
       "query_curated_views",
       "export_anonymized_data",
       "view_metrics_detailed",
       "create_reports",
-      "view_trend_analysis"
+      "view_trend_analysis",
+      "view_vehicle_analytics",
+      "generate_vehicle_performance_reports",
+      "analyze_vehicle_utilization",
+      "export_vehicle_data_anonymized",
+      "create_fleet_efficiency_reports"
     ],
     "risk_investigator": [
       "unmask_pii_with_mfa",
@@ -61,7 +84,12 @@
       "flag_suspicious_activity",
       "cross_region_override",
       "access_raw_location_data",
-      "review_driver_background"
+      "review_driver_background",
+      "investigate_vehicle_incidents",
+      "access_vehicle_security_logs",
+      "review_vehicle_compliance_violations",
+      "audit_vehicle_ownership_verification",
+      "access_vehicle_tracking_history"
     ],
     "regional_manager": [
       "assign_driver",
@@ -82,7 +110,15 @@
       "manage_regional_settings",
       "approve_regional_campaigns",
       "view_regional_financials",
-      "manage_partner_drivers"
+      "manage_partner_drivers",
+      "manage_regional_vehicles",
+      "approve_vehicle_registrations",
+      "manage_vehicle_fleet_budget",
+      "approve_major_vehicle_maintenance",
+      "manage_vehicle_partnerships",
+      "view_vehicle_financial_reports",
+      "configure_vehicle_operational_params",
+      "approve_vehicle_decommissioning"
     ],
     "expansion_manager": [
       "create_region_request",
@@ -94,7 +130,10 @@
       "create_vendor_onboarding_task",
       "request_temp_access_region",
       "publish_go_live_checklist",
-      "handover_to_regional_manager"
+      "handover_to_regional_manager",
+      "plan_vehicle_fleet_expansion",
+      "evaluate_vehicle_partnership_opportunities",
+      "configure_expansion_vehicle_requirements"
     ],
     "finance_ops": [
       "view_financial_reports",
@@ -104,7 +143,13 @@
       "manage_pricing_rules",
       "issue_refund_large",
       "view_driver_earnings",
-      "manage_incentives"
+      "manage_incentives",
+      "approve_vehicle_purchases",
+      "manage_vehicle_financing",
+      "process_vehicle_insurance_claims",
+      "approve_vehicle_maintenance_budgets",
+      "view_vehicle_cost_analysis",
+      "manage_vehicle_depreciation"
     ],
     "hr_ops": [
       "initiate_payroll_run",
@@ -126,7 +171,12 @@
       "view_executive_dashboard",
       "view_all_metrics",
       "view_financial_summary",
-      "view_strategic_reports"
+      "view_strategic_reports",
+      "approve_strategic_vehicle_investments",
+      "view_global_fleet_analytics",
+      "approve_vehicle_expansion_plans",
+      "access_executive_vehicle_reports",
+      "approve_major_vehicle_partnerships"
     ],
     "auditor": [
       "view_audit_logs",
@@ -153,9 +203,11 @@
     ]
   },
   "metadata": {
-    "generated_at": "2025-08-31T03:25:00Z",
-    "version": "v2025-08-31",
+    "generated_at": "2025-09-05T10:30:00Z",
+    "version": "v2025-09-05-vehicle-rbac",
     "total_roles": 15,
-    "total_permissions": 77
+    "total_permissions": 125,
+    "vehicle_permissions_added": 48,
+    "integration_version": "1.0.0"
   }
 }

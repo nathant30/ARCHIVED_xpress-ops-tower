@@ -1,0 +1,249 @@
+# Docker Compose for Nexus AI ML Infrastructure
+# Production-ready ML pipeline with event streaming, feature store, and model serving
+
+version: '3.8'
+
+services:
+  # Redis - Event Queue & Feature Cache
+  redis:
+    image: redis:7-alpine
+    container_name: xpress-ml-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    command: >
+      --save 60 1
+      --loglevel warning
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - ml_network
+
+  # Event Stream Processor
+  event_processor:
+    build:
+      context: .
+      dockerfile: Dockerfile.ml
+    container_name: xpress-event-processor
+    environment:
+      - NODE_ENV=production
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - WORKER_TYPE=event_processor
+      - WORKER_CONCURRENCY=4
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./logs/ml:/app/logs
+    restart: unless-stopped
+    networks:
+      - ml_network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # Feature Pipeline
+  feature_pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile.ml
+    container_name: xpress-feature-pipeline
+    environment:
+      - NODE_ENV=production
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - WORKER_TYPE=feature_pipeline
+      - BATCH_SIZE=1000
+      - PROCESSING_INTERVAL=10
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./logs/ml:/app/logs
+      - ./data/features:/app/data/features
+    restart: unless-stopped
+    networks:
+      - ml_network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 2G
+        reservations:
+          cpus: '0.75'
+          memory: 1G
+
+  # Model Training Service
+  model_trainer:
+    build:
+      context: .
+      dockerfile: Dockerfile.ml
+    container_name: xpress-model-trainer
+    environment:
+      - NODE_ENV=production
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - WORKER_TYPE=model_trainer
+      - MAX_CONCURRENT_JOBS=2
+      - MODEL_STORAGE_PATH=/app/data/models
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./logs/ml:/app/logs
+      - ./data/models:/app/data/models
+      - ./data/training:/app/data/training
+    restart: unless-stopped
+    networks:
+      - ml_network
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+
+  # ML Model Serving
+  model_server:
+    build:
+      context: .
+      dockerfile: Dockerfile.ml-serving
+    container_name: xpress-model-server
+    ports:
+      - "${ML_SERVER_PORT:-8080}:8080"
+    environment:
+      - NODE_ENV=production
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - SERVER_PORT=8080
+      - MODEL_STORAGE_PATH=/app/data/models
+      - FEATURE_STORE_URL=http://feature_store:3001
+    depends_on:
+      redis:
+        condition: service_healthy
+      feature_store:
+        condition: service_healthy
+    volumes:
+      - ./logs/ml:/app/logs
+      - ./data/models:/app/data/models:ro
+    restart: unless-stopped
+    networks:
+      - ml_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 3G
+        reservations:
+          cpus: '0.75'
+          memory: 1.5G
+
+  # Feature Store Service
+  feature_store:
+    build:
+      context: .
+      dockerfile: Dockerfile.feature-store
+    container_name: xpress-feature-store
+    ports:
+      - "${FEATURE_STORE_PORT:-3001}:3001"
+    environment:
+      - NODE_ENV=production
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - SERVER_PORT=3001
+      - FEATURE_RETENTION_DAYS=30
+      - CACHE_TTL=3600
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./logs/ml:/app/logs
+      - ./data/features:/app/data/features
+    restart: unless-stopped
+    networks:
+      - ml_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ML Monitoring & Metrics
+  ml_monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile.ml
+    container_name: xpress-ml-monitor
+    ports:
+      - "${ML_MONITOR_PORT:-9090}:9090"
+    environment:
+      - NODE_ENV=production
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - WORKER_TYPE=monitor
+      - METRICS_PORT=9090
+      - ALERT_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./logs/ml:/app/logs
+      - ./monitoring/ml:/app/monitoring
+    restart: unless-stopped
+    networks:
+      - ml_network
+
+  # Postgres for ML Metadata (Optional)
+  postgres_ml:
+    image: postgres:15-alpine
+    container_name: xpress-ml-postgres
+    environment:
+      POSTGRES_DB: xpress_ml
+      POSTGRES_USER: ${POSTGRES_USER:-xpress_ml}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ml_secure_password}
+    ports:
+      - "${POSTGRES_ML_PORT:-5433}:5432"
+    volumes:
+      - postgres_ml_data:/var/lib/postgresql/data
+      - ./scripts/init-ml-db.sql:/docker-entrypoint-initdb.d/init-ml-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-xpress_ml}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - ml_network
+
+volumes:
+  redis_data:
+    driver: local
+  postgres_ml_data:
+    driver: local
+
+networks:
+  ml_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

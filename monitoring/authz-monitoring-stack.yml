@@ -1,0 +1,420 @@
+# Authorization Monitoring Stack
+# Comprehensive monitoring for hardened RBAC+ABAC system
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: authz-monitoring-config
+  namespace: monitoring
+data:
+  # Grafana Dashboard JSON
+  authz-dashboard.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "Xpress AuthZ - Production Monitoring",
+        "tags": ["authorization", "security", "rbac"],
+        "timezone": "Asia/Manila",
+        "refresh": "30s",
+        "time": {
+          "from": "now-1h",
+          "to": "now"
+        },
+        "panels": [
+          {
+            "id": 1,
+            "title": "🔒 AuthZ Error Rate",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "rate(authz_errors_total[5m]) * 100",
+                "legendFormat": "Error Rate %"
+              }
+            ],
+            "thresholds": {
+              "steps": [
+                { "color": "green", "value": 0 },
+                { "color": "yellow", "value": 0.01 },
+                { "color": "red", "value": 0.1 }
+              ]
+            },
+            "unit": "percent"
+          },
+          {
+            "id": 2,
+            "title": "⚡ Policy Evaluation Latency",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.50, authz_duration_seconds_bucket)",
+                "legendFormat": "p50"
+              },
+              {
+                "expr": "histogram_quantile(0.95, authz_duration_seconds_bucket)", 
+                "legendFormat": "p95"
+              },
+              {
+                "expr": "histogram_quantile(0.99, authz_duration_seconds_bucket)",
+                "legendFormat": "p99"
+              }
+            ],
+            "yAxes": [
+              {
+                "unit": "ms",
+                "max": 100
+              }
+            ],
+            "alert": {
+              "conditions": [
+                {
+                  "query": { "queryType": "", "refId": "A" },
+                  "reducer": { "type": "last", "params": [] },
+                  "evaluator": { "params": [50], "type": "gt" }
+                }
+              ],
+              "executionErrorState": "alerting",
+              "noDataState": "no_data",
+              "frequency": "30s",
+              "message": "AuthZ p95 latency exceeded 50ms SLO"
+            }
+          },
+          {
+            "id": 3,
+            "title": "🔄 Policy Bundle Hash Sync",
+            "type": "table",
+            "targets": [
+              {
+                "expr": "group by (service, hash) (authz_policy_bundle_hash)",
+                "format": "table"
+              }
+            ],
+            "alert": {
+              "conditions": [
+                {
+                  "query": { "queryType": "", "refId": "A" },
+                  "reducer": { "type": "count", "params": [] },
+                  "evaluator": { "params": [1], "type": "gt" }
+                }
+              ],
+              "message": "Policy bundle hash mismatch detected - services out of sync"
+            }
+          },
+          {
+            "id": 4,
+            "title": "🔐 MFA Compliance Rate",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "(sum(authz_mfa_required_actions_total) - sum(authz_mfa_violations_total)) / sum(authz_mfa_required_actions_total) * 100",
+                "legendFormat": "MFA Compliance %"
+              }
+            ],
+            "thresholds": {
+              "steps": [
+                { "color": "red", "value": 0 },
+                { "color": "yellow", "value": 99 },
+                { "color": "green", "value": 100 }
+              ]
+            },
+            "unit": "percent"
+          },
+          {
+            "id": 5,
+            "title": "📊 Authorization Decision Volume",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(authz_decisions_total{decision=\"allow\"}[5m])",
+                "legendFormat": "Allowed"
+              },
+              {
+                "expr": "rate(authz_decisions_total{decision=\"deny\"}[5m])",
+                "legendFormat": "Denied"
+              }
+            ]
+          },
+          {
+            "id": 6,
+            "title": "🚨 Cross-Region Override Activity",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(authz_cross_region_overrides_total[5m])",
+                "legendFormat": "Granted Overrides"
+              },
+              {
+                "expr": "rate(authz_silent_override_blocked_total[5m])",
+                "legendFormat": "Blocked Silent Overrides"
+              }
+            ],
+            "alert": {
+              "conditions": [
+                {
+                  "query": { "queryType": "", "refId": "B" },
+                  "reducer": { "type": "last", "params": [] },
+                  "evaluator": { "params": [0], "type": "gt" }
+                }
+              ],
+              "message": "Silent override attempts detected - security violation"
+            }
+          },
+          {
+            "id": 7,
+            "title": "👥 PII Access Audit Trail",
+            "type": "table",
+            "targets": [
+              {
+                "expr": "increase(authz_pii_access_total[1h]) by (user, action, audit_id)",
+                "format": "table"
+              }
+            ]
+          },
+          {
+            "id": 8,
+            "title": "🌏 Regional Access Patterns",
+            "type": "piechart",
+            "targets": [
+              {
+                "expr": "sum by (region) (authz_decisions_total{decision=\"allow\"})",
+                "legendFormat": "{{ region }}"
+              }
+            ]
+          }
+        ],
+        "templating": {
+          "list": [
+            {
+              "name": "environment",
+              "type": "query",
+              "query": "label_values(environment)"
+            },
+            {
+              "name": "service",
+              "type": "query", 
+              "query": "label_values(service)"
+            }
+          ]
+        }
+      }
+    }
+
+  # Prometheus Alerting Rules
+  authz-alerts.yml: |
+    groups:
+      - name: authz.rules
+        rules:
+          # SLO Violations
+          - alert: AuthZErrorRateHigh
+            expr: rate(authz_errors_total[5m]) * 100 > 0.1
+            for: 2m
+            labels:
+              severity: critical
+              component: authorization
+            annotations:
+              summary: "Authorization error rate exceeded SLO"
+              description: "Error rate is {{ $value }}% (threshold: 0.1%)"
+              runbook_url: "https://wiki.xpress.ph/authz/runbooks/error-rate"
+
+          - alert: AuthZLatencyHigh  
+            expr: histogram_quantile(0.95, authz_duration_seconds_bucket) * 1000 > 50
+            for: 5m
+            labels:
+              severity: warning
+              component: authorization
+            annotations:
+              summary: "Authorization latency SLO violation"
+              description: "p95 latency is {{ $value }}ms (SLO: <50ms)"
+
+          # Security Violations
+          - alert: PolicyBundleHashMismatch
+            expr: count by (hash) (authz_policy_bundle_hash) > 1
+            for: 0s
+            labels:
+              severity: critical
+              component: authorization
+              security: high
+            annotations:
+              summary: "Policy bundle hash mismatch - services out of sync"
+              description: "Multiple policy hashes detected: services may have inconsistent authorization logic"
+
+          - alert: MFAViolationDetected
+            expr: rate(authz_mfa_violations_total[5m]) > 0
+            for: 0s
+            labels:
+              severity: critical
+              component: authorization
+              security: high
+            annotations:
+              summary: "MFA requirement violation detected"
+              description: "PII access attempted without valid MFA"
+
+          - alert: SilentOverrideAttempt
+            expr: rate(authz_silent_override_blocked_total[5m]) > 0
+            for: 0s
+            labels:
+              severity: high
+              component: authorization
+              security: high
+            annotations:
+              summary: "Silent cross-region override attempt blocked"
+              description: "User attempted cross-region access without case_id/approver"
+
+          - alert: BulkPIIAccessDetected
+            expr: rate(authz_pii_access_total[1h]) by (user) > 50
+            for: 10m
+            labels:
+              severity: warning
+              component: authorization
+              security: medium
+            annotations:
+              summary: "Bulk PII access detected for user {{ $labels.user }}"
+              description: "User accessed PII {{ $value }} times in 1 hour"
+
+          # Operational Issues
+          - alert: AuthZServiceDown
+            expr: up{job="authz-service"} == 0
+            for: 1m
+            labels:
+              severity: critical
+              component: authorization
+            annotations:
+              summary: "Authorization service is down"
+              description: "AuthZ service {{ $labels.instance }} has been down for 1+ minutes"
+
+          - alert: AuthZHighMemoryUsage
+            expr: (process_resident_memory_bytes{job="authz-service"} / 1024 / 1024 / 1024) > 2
+            for: 5m
+            labels:
+              severity: warning
+              component: authorization
+            annotations:
+              summary: "Authorization service memory usage high"
+              description: "Memory usage is {{ $value }}GB (threshold: 2GB)"
+
+  # Azure Sentinel KQL Rules  
+  sentinel-rules.kql: |
+    // Rule 1: Detect authorization bypass attempts
+    let AuthZBypassAttempts = AuthZLogs
+    | where TimeGenerated > ago(10m)
+    | where Decision == "deny" and RetryCount > 3
+    | summarize AttemptCount = count() by User, SourceIP, Action, bin(TimeGenerated, 5m)
+    | where AttemptCount >= 5
+    | extend Severity = "High", ThreatCategory = "PrivilegeEscalation";
+
+    // Rule 2: Detect suspicious cross-region activity
+    let SuspiciousRegionAccess = AuthZLogs
+    | where TimeGenerated > ago(1h)
+    | where AuditType == "cross_region_override"
+    | summarize UniqueRegions = dcount(TargetRegion), OverrideCount = count() 
+      by User, SourceRegion, bin(TimeGenerated, 30m)
+    | where UniqueRegions >= 3 or OverrideCount >= 10
+    | extend Severity = "Medium", ThreatCategory = "DataExfiltration";
+
+    // Rule 3: Detect off-hours PII access
+    let OffHoursPIIAccess = AuthZLogs
+    | where TimeGenerated > ago(4h)
+    | where Action has_any ("unmask_pii", "export_pii")
+    | extend Hour = datetime_part("hour", TimeGenerated + 8h) // Convert to PHT
+    | where Hour < 8 or Hour > 18
+    | summarize PIIAccessCount = count() by User, Hour, SourceIP
+    | where PIIAccessCount >= 3
+    | extend Severity = "Medium", ThreatCategory = "DataAccess";
+
+    // Rule 4: Detect policy bundle tampering
+    let PolicyTampering = AuthZLogs
+    | where TimeGenerated > ago(15m)  
+    | where PolicyHash != "7a3f9e2b8c1d5f4e" // Expected production hash
+    | summarize AffectedServices = dcount(Service) by PolicyHash, PolicyVersion
+    | where AffectedServices >= 1
+    | extend Severity = "Critical", ThreatCategory = "PolicyManipulation";
+
+    // Rule 5: Detect MFA bypass attempts
+    let MFABypassDetection = AuthZLogs
+    | where TimeGenerated > ago(30m)
+    | where Action has_any ("unmask_pii_with_mfa", "cross_region_override")
+    | where MFAPresent == false and Decision == "allow"
+    | extend Severity = "Critical", ThreatCategory = "AuthenticationBypass";
+
+    // Union all detections
+    union AuthZBypassAttempts, SuspiciousRegionAccess, OffHoursPIIAccess, 
+          PolicyTampering, MFABypassDetection
+    | project TimeGenerated, User, SourceIP, Severity, ThreatCategory, 
+             AttemptCount, UniqueRegions, OverrideCount, PIIAccessCount, 
+             AffectedServices, PolicyHash
+    | order by Severity desc, TimeGenerated desc
+
+---
+apiVersion: v1
+kind: ConfigMap  
+metadata:
+  name: authz-metrics-config
+  namespace: monitoring
+data:
+  # Custom metrics collection
+  metrics-config.yml: |
+    metrics:
+      # Core Authorization Metrics
+      authz_decisions_total:
+        type: counter
+        help: "Total authorization decisions made"
+        labels: ["decision", "action", "role", "region"]
+        
+      authz_duration_seconds:
+        type: histogram
+        help: "Authorization decision latency"
+        buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0]
+        labels: ["action", "decision"]
+        
+      authz_errors_total:
+        type: counter
+        help: "Authorization errors"
+        labels: ["error_type", "action", "service"]
+        
+      # Policy Bundle Metrics  
+      authz_policy_bundle_hash:
+        type: gauge
+        help: "Current policy bundle hash"
+        labels: ["service", "hash", "version"]
+        
+      authz_policy_evaluations_total:
+        type: counter
+        help: "Policy evaluation count by step"
+        labels: ["step", "result"] # rbac, region, sensitivity, override
+        
+      # MFA Metrics
+      authz_mfa_required_actions_total:
+        type: counter
+        help: "Actions requiring MFA"
+        labels: ["action", "user_role"]
+        
+      authz_mfa_violations_total:
+        type: counter  
+        help: "MFA requirement violations"
+        labels: ["action", "user", "violation_type"]
+        
+      # Security Metrics
+      authz_cross_region_overrides_total:
+        type: counter
+        help: "Cross-region overrides granted"
+        labels: ["source_region", "target_region", "case_id"]
+        
+      authz_silent_override_blocked_total:
+        type: counter
+        help: "Silent override attempts blocked"
+        labels: ["user_role", "target_region", "block_reason"]
+        
+      authz_pii_access_total:
+        type: counter
+        help: "PII access requests"
+        labels: ["user", "action", "audit_id", "result"]
+        
+      # Cache Metrics
+      authz_cache_hits_total:
+        type: counter
+        help: "Policy evaluation cache hits"
+        labels: ["cache_type"]
+        
+      authz_cache_size:
+        type: gauge
+        help: "Current cache size"
+        labels: ["cache_type"]

@@ -5,6 +5,11 @@ import { fraudMockData, getFraudRiskColor, getFraudRiskBadge, getInvestigationSt
 import { logger } from '@/lib/security/productionLogger';
 import { EnhancedDriver } from '@/types/fraud';
 
+interface DriverProfileModalProps {
+  driver: EnhancedDriver;
+  onClose: () => void;
+}
+
 const EnhancedDriverTable = () => {
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState('');
@@ -1067,7 +1072,7 @@ const EnhancedDriverTable = () => {
   };
 
   const handleRowClick = (driver: EnhancedDriver) => {
-    router.push(`/driver-profile?id=${driver.id}&driverId=${driver.driverId}`);
+    setSelectedDriver(driver);
   };
 
   const isRecentlyChanged = (id: number) => {

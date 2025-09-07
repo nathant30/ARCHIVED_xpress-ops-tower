@@ -1,0 +1,163 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "RBAC Role Management - Production Monitoring",
+    "description": "Comprehensive monitoring for RBAC role management system",
+    "tags": ["rbac", "security", "roles"],
+    "timezone": "UTC",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Approvals Funnel",
+        "type": "stat",
+        "targets": [
+          {
+            "query": "SELECT status, COUNT(*) FROM rbac_role_pending_changes WHERE created_at > NOW() - INTERVAL '24 hours' GROUP BY status",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 5},
+                {"color": "red", "value": 20}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Time to Approve (P50/P95)",
+        "type": "graph",
+        "targets": [
+          {
+            "query": "SELECT DATE_TRUNC('hour', created_at) as time, PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY EXTRACT(epoch FROM (updated_at - created_at))/60) as p50, PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY EXTRACT(epoch FROM (updated_at - created_at))/60) as p95 FROM rbac_role_pending_changes WHERE status IN ('approved', 'rejected') AND created_at > NOW() - INTERVAL '7 days' GROUP BY time ORDER BY time",
+            "refId": "B"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Minutes",
+            "min": 0
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Role Changes by Level",
+        "type": "piechart",
+        "targets": [
+          {
+            "query": "SELECT CASE WHEN r.level >= 60 THEN 'Executive+' WHEN r.level >= 40 THEN 'Manager' WHEN r.level >= 30 THEN 'Operations' ELSE 'Ground' END as level_group, COUNT(*) FROM rbac_role_pending_changes pc JOIN rbac_roles r ON pc.role_id = r.id WHERE pc.created_at > NOW() - INTERVAL '7 days' GROUP BY level_group",
+            "refId": "C"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "Access Denials by Reason",
+        "type": "piechart",
+        "targets": [
+          {
+            "query": "SELECT denial_reason, COUNT(*) FROM security_audit_log WHERE event_type = 'ACCESS_DENIED' AND timestamp > NOW() - INTERVAL '24 hours' GROUP BY denial_reason",
+            "refId": "D"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "API Performance (P95 Response Time)",
+        "type": "graph",
+        "targets": [
+          {
+            "query": "SELECT DATE_TRUNC('minute', timestamp) as time, PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY response_time_ms) as p95_response_time FROM api_metrics WHERE endpoint LIKE '/api/rbac/roles%' AND timestamp > NOW() - INTERVAL '1 hour' GROUP BY time ORDER BY time",
+            "refId": "E"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Milliseconds",
+            "min": 0,
+            "max": 200
+          }
+        ],
+        "thresholds": [
+          {
+            "value": 100,
+            "colorMode": "critical",
+            "op": "gt"
+          },
+          {
+            "value": 150,
+            "colorMode": "critical",
+            "op": "gt"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8}
+      },
+      {
+        "id": 6,
+        "title": "Recent Baseline Role Changes (CRITICAL)",
+        "type": "table",
+        "targets": [
+          {
+            "query": "SELECT r.name, pc.status, pc.created_at, pc.updated_at, pc.proposed_by, pc.approver_id FROM rbac_role_pending_changes pc JOIN rbac_roles r ON pc.role_id = r.id WHERE r.name IN ('ground_ops', 'support', 'executive', 'iam_admin') AND pc.created_at > NOW() - INTERVAL '7 days' ORDER BY pc.created_at DESC LIMIT 20",
+            "refId": "F"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16}
+      },
+      {
+        "id": 7,
+        "title": "Role Version History",
+        "type": "graph",
+        "targets": [
+          {
+            "query": "SELECT DATE_TRUNC('day', changed_at) as time, COUNT(*) as version_count FROM rbac_role_versions WHERE changed_at > NOW() - INTERVAL '30 days' GROUP BY time ORDER BY time",
+            "refId": "G"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24}
+      },
+      {
+        "id": 8,
+        "title": "Export Performance",
+        "type": "stat",
+        "targets": [
+          {
+            "query": "SELECT AVG(response_time_ms) as avg_export_time, MAX(response_time_ms) as max_export_time FROM api_metrics WHERE endpoint = '/api/rbac/roles' AND query_params LIKE '%format=%' AND timestamp > NOW() - INTERVAL '1 hour'",
+            "refId": "H"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms",
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 1000},
+                {"color": "red", "value": 2000}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24}
+      }
+    ],
+    "time": {
+      "from": "now-24h",
+      "to": "now"
+    },
+    "refresh": "30s"
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "id": "authz-test-env",
+  "name": "AuthZ Test Environment",
+  "values": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:4001",
+      "type": "default"
+    },
+    {
+      "key": "ground_ops_password",
+      "value": "test123",
+      "type": "secret"
+    },
+    {
+      "key": "risk_investigator_password", 
+      "value": "test123",
+      "type": "secret"
+    },
+    {
+      "key": "totp_code",
+      "value": "123456",
+      "type": "default"
+    },
+    {
+      "key": "support_token",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "analyst_token",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "ops_manager_token",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "regional_manager_token",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "night_ops_token",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "risk_investigator_no_mfa_token",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "mfa_challenge_response",
+      "value": "123456",
+      "type": "default"
+    },
+    {
+      "key": "expansion_manager_password",
+      "value": "test123",
+      "type": "secret"
+    },
+    {
+      "key": "expansion_manager_token",
+      "value": "",
+      "type": "default"
+    }
+  ]
+}

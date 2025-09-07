@@ -1,0 +1,814 @@
+# =====================================================
+# OPERATORS MANAGEMENT TESTING CI/CD PIPELINE
+# Comprehensive automated testing workflow for operators management system
+# =====================================================
+
+name: Operators Management Testing Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'src/app/api/operators/**'
+      - 'src/lib/services/OperatorService.ts'
+      - 'src/lib/services/PerformanceService.ts'
+      - 'src/lib/services/FinancialService.ts'
+      - 'src/types/operators.ts'
+      - '__tests__/operators/**'
+      - 'database/**'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'src/app/api/operators/**'
+      - 'src/lib/services/OperatorService.ts'
+      - 'src/lib/services/PerformanceService.ts'
+      - 'src/lib/services/FinancialService.ts'
+      - 'src/types/operators.ts'
+      - '__tests__/operators/**'
+      - 'database/**'
+  schedule:
+    # Run full test suite daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      test_level:
+        description: 'Test level to run'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - 'unit'
+          - 'integration'
+          - 'e2e'
+          - 'performance'
+          - 'security'
+          - 'compliance'
+          - 'full'
+      environment:
+        description: 'Environment to test against'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - 'development'
+          - 'staging'
+          - 'production'
+
+env:
+  NODE_VERSION: '18'
+  POSTGRES_VERSION: '14'
+  REDIS_VERSION: '7'
+  
+jobs:
+  # =====================================================
+  # SETUP AND VALIDATION
+  # =====================================================
+  
+  setup:
+    name: Setup and Validation
+    runs-on: ubuntu-latest
+    outputs:
+      test-level: ${{ steps.determine-tests.outputs.test-level }}
+      should-run-unit: ${{ steps.determine-tests.outputs.should-run-unit }}
+      should-run-integration: ${{ steps.determine-tests.outputs.should-run-integration }}
+      should-run-e2e: ${{ steps.determine-tests.outputs.should-run-e2e }}
+      should-run-performance: ${{ steps.determine-tests.outputs.should-run-performance }}
+      should-run-security: ${{ steps.determine-tests.outputs.should-run-security }}
+      should-run-compliance: ${{ steps.determine-tests.outputs.should-run-compliance }}
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint operators code
+        run: |
+          npx eslint src/app/api/operators/ --ext .ts,.tsx
+          npx eslint src/lib/services/OperatorService.ts --ext .ts
+          npx eslint src/lib/services/PerformanceService.ts --ext .ts
+          npx eslint src/lib/services/FinancialService.ts --ext .ts
+
+      - name: Type check operators code
+        run: |
+          npx tsc --noEmit --project tsconfig.json
+
+      - name: Determine test levels to run
+        id: determine-tests
+        run: |
+          if [[ "${{ github.event.inputs.test_level }}" != "" ]]; then
+            TEST_LEVEL="${{ github.event.inputs.test_level }}"
+          elif [[ "${{ github.event_name }}" == "schedule" ]]; then
+            TEST_LEVEL="full"
+          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            TEST_LEVEL="full"
+          else
+            TEST_LEVEL="unit,integration"
+          fi
+          
+          echo "test-level=$TEST_LEVEL" >> $GITHUB_OUTPUT
+          
+          if [[ "$TEST_LEVEL" == "full" || "$TEST_LEVEL" == *"unit"* ]]; then
+            echo "should-run-unit=true" >> $GITHUB_OUTPUT
+          else
+            echo "should-run-unit=false" >> $GITHUB_OUTPUT
+          fi
+          
+          if [[ "$TEST_LEVEL" == "full" || "$TEST_LEVEL" == *"integration"* ]]; then
+            echo "should-run-integration=true" >> $GITHUB_OUTPUT
+          else
+            echo "should-run-integration=false" >> $GITHUB_OUTPUT
+          fi
+          
+          if [[ "$TEST_LEVEL" == "full" || "$TEST_LEVEL" == *"e2e"* ]]; then
+            echo "should-run-e2e=true" >> $GITHUB_OUTPUT
+          else
+            echo "should-run-e2e=false" >> $GITHUB_OUTPUT
+          fi
+          
+          if [[ "$TEST_LEVEL" == "full" || "$TEST_LEVEL" == *"performance"* ]]; then
+            echo "should-run-performance=true" >> $GITHUB_OUTPUT
+          else
+            echo "should-run-performance=false" >> $GITHUB_OUTPUT
+          fi
+          
+          if [[ "$TEST_LEVEL" == "full" || "$TEST_LEVEL" == *"security"* ]]; then
+            echo "should-run-security=true" >> $GITHUB_OUTPUT
+          else
+            echo "should-run-security=false" >> $GITHUB_OUTPUT
+          fi
+          
+          if [[ "$TEST_LEVEL" == "full" || "$TEST_LEVEL" == *"compliance"* ]]; then
+            echo "should-run-compliance=true" >> $GITHUB_OUTPUT
+          else
+            echo "should-run-compliance=false" >> $GITHUB_OUTPUT
+          fi
+
+  # =====================================================
+  # UNIT TESTS
+  # =====================================================
+  
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: setup
+    if: needs.setup.outputs.should-run-unit == 'true'
+    
+    strategy:
+      matrix:
+        test-group:
+          - 'operators.service'
+          - 'performance.service'
+          - 'financial.service'
+          - 'database.utils'
+          - 'api.handlers'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup test environment
+        run: |
+          cp .env.test.example .env.test
+          echo "NODE_ENV=test" >> .env.test
+          echo "DATABASE_URL=postgresql://test:test@localhost:5432/test_db" >> .env.test
+
+      - name: Start PostgreSQL
+        uses: harmon758/postgresql-action@v1
+        with:
+          postgresql version: ${{ env.POSTGRES_VERSION }}
+          postgresql db: test_db
+          postgresql user: test
+          postgresql password: test
+
+      - name: Start Redis
+        uses: supercharge/redis-github-action@1.4.0
+        with:
+          redis-version: ${{ env.REDIS_VERSION }}
+
+      - name: Run database migrations
+        run: |
+          npm run db:migrate -- --env=test
+
+      - name: Run unit tests
+        run: |
+          case "${{ matrix.test-group }}" in
+            "operators.service")
+              npm test -- __tests__/operators/unit/operators.service.test.ts --coverage --passWithNoTests
+              ;;
+            "performance.service")
+              npm test -- __tests__/operators/unit/performance.service.test.ts --coverage --passWithNoTests
+              ;;
+            "financial.service")
+              npm test -- __tests__/operators/unit/financial.service.test.ts --coverage --passWithNoTests
+              ;;
+            "database.utils")
+              npm test -- __tests__/operators/unit/database.utils.test.ts --coverage --passWithNoTests
+              ;;
+            "api.handlers")
+              npm test -- __tests__/operators/unit/api.handlers.test.ts --coverage --passWithNoTests
+              ;;
+          esac
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage/lcov.info
+          flags: unit-tests,${{ matrix.test-group }}
+          name: unit-${{ matrix.test-group }}
+
+  # =====================================================
+  # INTEGRATION TESTS
+  # =====================================================
+  
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: setup
+    if: needs.setup.outputs.should-run-integration == 'true'
+    
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_USER: test
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    strategy:
+      matrix:
+        test-suite:
+          - 'operators-api'
+          - 'database-integration'
+          - 'performance-integration'
+          - 'financial-integration'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup test environment
+        run: |
+          cp .env.test.example .env.test
+          echo "NODE_ENV=test" >> .env.test
+          echo "DATABASE_URL=postgresql://test:test@localhost:5432/test_db" >> .env.test
+          echo "REDIS_URL=redis://localhost:6379" >> .env.test
+
+      - name: Run database setup
+        run: |
+          npm run db:migrate -- --env=test
+          npm run db:seed -- --env=test --minimal
+
+      - name: Run integration tests
+        run: |
+          case "${{ matrix.test-suite }}" in
+            "operators-api")
+              npm test -- __tests__/operators/integration/operators.api.test.ts --verbose
+              ;;
+            "database-integration")
+              npm test -- __tests__/operators/integration/database.integration.test.ts --verbose
+              ;;
+            "performance-integration")
+              npm test -- __tests__/operators/integration/performance.integration.test.ts --verbose
+              ;;
+            "financial-integration")
+              npm test -- __tests__/operators/integration/financial.integration.test.ts --verbose
+              ;;
+          esac
+
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: integration-test-artifacts-${{ matrix.test-suite }}
+          path: |
+            test-results/
+            logs/
+            screenshots/
+
+  # =====================================================
+  # END-TO-END TESTS
+  # =====================================================
+  
+  e2e-tests:
+    name: End-to-End Tests
+    runs-on: ubuntu-latest
+    needs: setup
+    if: needs.setup.outputs.should-run-e2e == 'true'
+    
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_USER: test
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps
+
+      - name: Setup test environment
+        run: |
+          cp .env.test.example .env.test
+          echo "NODE_ENV=test" >> .env.test
+          echo "DATABASE_URL=postgresql://test:test@localhost:5432/test_db" >> .env.test
+          echo "REDIS_URL=redis://localhost:6379" >> .env.test
+
+      - name: Build application
+        run: npm run build
+
+      - name: Start application
+        run: |
+          npm start &
+          sleep 30
+          curl -f http://localhost:3000/api/health || exit 1
+
+      - name: Run database setup
+        run: |
+          npm run db:migrate -- --env=test
+          npm run db:seed -- --env=test --e2e
+
+      - name: Run E2E tests
+        run: |
+          npx playwright test __tests__/operators/e2e/ --reporter=html,json
+
+      - name: Upload E2E results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: e2e-results
+          path: |
+            playwright-report/
+            test-results/
+
+  # =====================================================
+  # PERFORMANCE TESTS
+  # =====================================================
+  
+  performance-tests:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    needs: setup
+    if: needs.setup.outputs.should-run-performance == 'true'
+    
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_USER: test
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup performance test environment
+        run: |
+          cp .env.performance.example .env.test
+          echo "NODE_ENV=performance" >> .env.test
+          echo "DATABASE_URL=postgresql://test:test@localhost:5432/test_db" >> .env.test
+          echo "REDIS_URL=redis://localhost:6379" >> .env.test
+
+      - name: Build application
+        run: npm run build
+
+      - name: Start application
+        run: |
+          npm start &
+          sleep 30
+
+      - name: Run performance tests
+        run: |
+          npm test -- __tests__/operators/performance/load.performance.test.ts --timeout=600000
+
+      - name: Generate performance report
+        run: |
+          node scripts/generate-performance-report.js
+
+      - name: Upload performance results
+        uses: actions/upload-artifact@v3
+        with:
+          name: performance-results
+          path: |
+            performance-report/
+            performance-metrics.json
+
+  # =====================================================
+  # SECURITY TESTS
+  # =====================================================
+  
+  security-tests:
+    name: Security Tests
+    runs-on: ubuntu-latest
+    needs: setup
+    if: needs.setup.outputs.should-run-security == 'true'
+    
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_USER: test
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Start application
+        run: |
+          npm start &
+          sleep 30
+
+      - name: Run security audit
+        run: |
+          npm audit --audit-level=high
+
+      - name: Run dependency vulnerability scan
+        run: |
+          npx retire --exitwith 1
+
+      - name: Run security tests
+        run: |
+          npm test -- __tests__/operators/security/security.test.ts --verbose
+
+      - name: Run OWASP ZAP security scan
+        uses: zaproxy/action-full-scan@v0.7.0
+        with:
+          target: 'http://localhost:3000'
+          rules_file_name: '.zap/rules.tsv'
+          cmd_options: '-a -d -T 60 -m 10'
+
+      - name: Upload security results
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-results
+          path: |
+            security-report/
+            zap-report.html
+
+  # =====================================================
+  # COMPLIANCE TESTS
+  # =====================================================
+  
+  compliance-tests:
+    name: Philippines Compliance Tests
+    runs-on: ubuntu-latest
+    needs: setup
+    if: needs.setup.outputs.should-run-compliance == 'true'
+    
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_USER: test
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup compliance test environment
+        run: |
+          cp .env.compliance.example .env.test
+          echo "NODE_ENV=compliance" >> .env.test
+          echo "DATABASE_URL=postgresql://test:test@localhost:5432/test_db" >> .env.test
+          echo "REDIS_URL=redis://localhost:6379" >> .env.test
+
+      - name: Build application
+        run: npm run build
+
+      - name: Start application
+        run: |
+          npm start &
+          sleep 30
+
+      - name: Run compliance tests
+        run: |
+          npm test -- __tests__/operators/compliance/philippines-compliance.test.ts --verbose --timeout=300000
+
+      - name: Generate compliance report
+        run: |
+          node scripts/generate-compliance-report.js
+
+      - name: Upload compliance results
+        uses: actions/upload-artifact@v3
+        with:
+          name: compliance-results
+          path: |
+            compliance-report/
+            bir-compliance.json
+            bsp-compliance.json
+            ltfrb-compliance.json
+            dpa-compliance.json
+
+  # =====================================================
+  # RESULTS AGGREGATION AND REPORTING
+  # =====================================================
+  
+  aggregate-results:
+    name: Aggregate Test Results
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests, e2e-tests, performance-tests, security-tests, compliance-tests]
+    if: always()
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate comprehensive test report
+        run: |
+          node scripts/aggregate-test-results.js
+
+      - name: Upload comprehensive report
+        uses: actions/upload-artifact@v3
+        with:
+          name: comprehensive-test-report
+          path: |
+            test-summary.html
+            test-metrics.json
+            coverage-summary.json
+
+      - name: Comment PR with test results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            let comment = '## 🧪 Operators Management Test Results\n\n';
+            
+            try {
+              const metrics = JSON.parse(fs.readFileSync('test-metrics.json', 'utf8'));
+              
+              comment += '### Test Summary\n';
+              comment += `- **Unit Tests**: ${metrics.unit?.passed || 0}/${metrics.unit?.total || 0} passed\n`;
+              comment += `- **Integration Tests**: ${metrics.integration?.passed || 0}/${metrics.integration?.total || 0} passed\n`;
+              comment += `- **E2E Tests**: ${metrics.e2e?.passed || 0}/${metrics.e2e?.total || 0} passed\n`;
+              comment += `- **Performance Tests**: ${metrics.performance?.passed || 0}/${metrics.performance?.total || 0} passed\n`;
+              comment += `- **Security Tests**: ${metrics.security?.passed || 0}/${metrics.security?.total || 0} passed\n`;
+              comment += `- **Compliance Tests**: ${metrics.compliance?.passed || 0}/${metrics.compliance?.total || 0} passed\n\n`;
+              
+              if (metrics.coverage) {
+                comment += '### Code Coverage\n';
+                comment += `- **Lines**: ${metrics.coverage.lines}%\n`;
+                comment += `- **Functions**: ${metrics.coverage.functions}%\n`;
+                comment += `- **Branches**: ${metrics.coverage.branches}%\n`;
+                comment += `- **Statements**: ${metrics.coverage.statements}%\n\n`;
+              }
+              
+              if (metrics.performance) {
+                comment += '### Performance Metrics\n';
+                comment += `- **API Response Time**: ${metrics.performance.avgResponseTime}ms\n`;
+                comment += `- **Database Query Time**: ${metrics.performance.avgQueryTime}ms\n`;
+                comment += `- **Throughput**: ${metrics.performance.throughput} req/sec\n\n`;
+              }
+              
+              const overallStatus = (
+                (metrics.unit?.passed === metrics.unit?.total) &&
+                (metrics.integration?.passed === metrics.integration?.total) &&
+                (metrics.e2e?.passed === metrics.e2e?.total)
+              ) ? '✅ All tests passed' : '❌ Some tests failed';
+              
+              comment += `### Overall Status: ${overallStatus}\n`;
+              
+            } catch (error) {
+              comment += '❌ Could not generate test summary\n';
+            }
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  # =====================================================
+  # DEPLOYMENT GATE
+  # =====================================================
+  
+  deployment-gate:
+    name: Deployment Gate
+    runs-on: ubuntu-latest
+    needs: [aggregate-results]
+    if: always() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    
+    steps:
+      - name: Download test results
+        uses: actions/download-artifact@v3
+        with:
+          name: comprehensive-test-report
+
+      - name: Check deployment readiness
+        run: |
+          node -e "
+            const fs = require('fs');
+            const metrics = JSON.parse(fs.readFileSync('test-metrics.json', 'utf8'));
+            
+            const unitPassed = (metrics.unit?.passed || 0) === (metrics.unit?.total || 0);
+            const integrationPassed = (metrics.integration?.passed || 0) === (metrics.integration?.total || 0);
+            const securityPassed = (metrics.security?.passed || 0) === (metrics.security?.total || 0);
+            const compliancePassed = (metrics.compliance?.passed || 0) === (metrics.compliance?.total || 0);
+            
+            const coverageOk = (metrics.coverage?.lines || 0) >= 80;
+            const performanceOk = (metrics.performance?.avgResponseTime || 5000) < 2000;
+            
+            const ready = unitPassed && integrationPassed && securityPassed && compliancePassed && coverageOk && performanceOk;
+            
+            console.log('Deployment readiness check:');
+            console.log('- Unit tests:', unitPassed ? '✅' : '❌');
+            console.log('- Integration tests:', integrationPassed ? '✅' : '❌');
+            console.log('- Security tests:', securityPassed ? '✅' : '❌');
+            console.log('- Compliance tests:', compliancePassed ? '✅' : '❌');
+            console.log('- Code coverage:', coverageOk ? '✅' : '❌');
+            console.log('- Performance:', performanceOk ? '✅' : '❌');
+            console.log('');
+            console.log('Ready for deployment:', ready ? '✅' : '❌');
+            
+            if (!ready) {
+              process.exit(1);
+            }
+          "
+
+      - name: Set deployment status
+        if: success()
+        run: |
+          echo "DEPLOYMENT_READY=true" >> $GITHUB_ENV
+          echo "✅ Operators Management system is ready for deployment"
+
+      - name: Block deployment
+        if: failure()
+        run: |
+          echo "DEPLOYMENT_READY=false" >> $GITHUB_ENV
+          echo "❌ Operators Management system is NOT ready for deployment"
+          exit 1

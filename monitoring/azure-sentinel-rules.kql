@@ -1,0 +1,270 @@
+// Azure Sentinel Detection Rules for Xpress AuthZ System
+// Comprehensive security monitoring for hardened RBAC+ABAC
+
+// ===========================================
+// RULE 1: Authorization Privilege Escalation
+// ===========================================
+let PrivilegeEscalationDetection = 
+AuthZLogs
+| where TimeGenerated > ago(15m)
+| where Decision == "deny"
+| where Action has_any ("manage_users", "assign_roles", "manage_feature_flags")
+| summarize 
+    AttemptCount = count(),
+    UniqueActions = dcount(Action),
+    SourceIPs = make_set(SourceIP)
+  by User, UserRole, bin(TimeGenerated, 5m)
+| where AttemptCount >= 5 or UniqueActions >= 3
+| extend 
+    Severity = "High",
+    ThreatCategory = "PrivilegeEscalation",
+    AlertDescription = strcat("User ", User, " (", UserRole, ") made ", AttemptCount, " privilege escalation attempts"),
+    RecommendedAction = "Investigate user account for compromise, review recent role changes"
+| project TimeGenerated, User, UserRole, AttemptCount, UniqueActions, SourceIPs, Severity, ThreatCategory, AlertDescription, RecommendedAction;
+
+// ===========================================  
+// RULE 2: Policy Bundle Tampering Detection
+// ===========================================
+let PolicyTamperingDetection =
+AuthZLogs
+| where TimeGenerated > ago(10m)
+| where isnotempty(PolicyHash)
+| summarize 
+    UniqueHashes = dcount(PolicyHash),
+    Hashes = make_set(PolicyHash),
+    Services = make_set(ServiceName)
+  by bin(TimeGenerated, 5m)
+| where UniqueHashes > 1
+| extend
+    Severity = "Critical",
+    ThreatCategory = "PolicyManipulation", 
+    AlertDescription = strcat("Multiple policy bundle hashes detected: ", strcat_array(Hashes, ", ")),
+    RecommendedAction = "Immediately verify policy bundle integrity, check for unauthorized deployments"
+| project TimeGenerated, UniqueHashes, Hashes, Services, Severity, ThreatCategory, AlertDescription, RecommendedAction;
+
+// ===========================================
+// RULE 3: Bulk PII Data Exfiltration
+// ===========================================
+let BulkPIIExfiltrationDetection =
+AuthZLogs
+| where TimeGenerated > ago(30m)
+| where Action has_any ("unmask_pii_with_mfa", "export_pii_data", "contact_driver_unmasked")
+| where Decision == "allow"
+| summarize 
+    PIIAccessCount = count(),
+    UniqueResources = dcount(ResourceId),
+    DataVolume = sum(toint(ResultMetadata.recordCount)),
+    Actions = make_set(Action)
+  by User, SourceIP, bin(TimeGenerated, 10m)
+| where PIIAccessCount >= 20 or DataVolume >= 1000 or UniqueResources >= 50
+| extend
+    RiskScore = (PIIAccessCount * 2) + (DataVolume / 10) + (UniqueResources * 3),
+    Severity = iff(RiskScore > 200, "Critical", iff(RiskScore > 100, "High", "Medium")),
+    ThreatCategory = "DataExfiltration",
+    AlertDescription = strcat("User ", User, " accessed ", PIIAccessCount, " PII records (", DataVolume, " total records)"),
+    RecommendedAction = "Review user activity, validate business justification, check for insider threat"
+| project TimeGenerated, User, SourceIP, PIIAccessCount, DataVolume, UniqueResources, RiskScore, Severity, ThreatCategory, AlertDescription, RecommendedAction;
+
+// ===========================================
+// RULE 4: Cross-Region Override Abuse
+// ===========================================
+let CrossRegionAbuseDetection =
+AuthZLogs  
+| where TimeGenerated > ago(1h)
+| where AuditType == "cross_region_override"
+| where Decision == "allow"
+| summarize
+    OverrideCount = count(),
+    UniqueRegions = dcount(TargetRegion),
+    Regions = make_set(TargetRegion),
+    Cases = make_set(CaseId),
+    Approvers = make_set(ApproverId)
+  by User, UserRole, SourceRegion, bin(TimeGenerated, 15m)
+| where OverrideCount >= 10 or UniqueRegions >= 4
+| extend
+    Severity = iff(UniqueRegions >= 4, "High", "Medium"),
+    ThreatCategory = "LateralMovement",
+    AlertDescription = strcat("User ", User, " performed ", OverrideCount, " cross-region overrides across ", UniqueRegions, " regions"),
+    RecommendedAction = "Validate override justifications, check case IDs for legitimacy, review approver authorizations"
+| project TimeGenerated, User, UserRole, SourceRegion, OverrideCount, UniqueRegions, Regions, Cases, Approvers, Severity, ThreatCategory, AlertDescription, RecommendedAction;
+
+// ===========================================
+// RULE 5: Off-Hours Sensitive Operations
+// ===========================================
+let OffHoursSensitiveOpsDetection =
+AuthZLogs
+| where TimeGenerated > ago(4h)
+| where Action has_any ("unmask_pii_with_mfa", "manage_users", "export_audit_data", "manage_feature_flags")
+| where Decision == "allow"
+| extend PHT_Hour = datetime_part("hour", TimeGenerated + 8h) // Convert to Philippines Time
+| where PHT_Hour < 8 or PHT_Hour > 18 // Outside business hours
+| summarize
+    OffHoursCount = count(),
+    Actions = make_set(Action),
+    MaxSeverityAction = arg_max(Action, TimeGenerated)
+  by User, UserRole, SourceIP, bin(TimeGenerated, 1h)
+| where OffHoursCount >= 3
+| extend
+    Severity = iff(MaxSeverityAction has_any ("manage_users", "manage_feature_flags"), "High", "Medium"),
+    ThreatCategory = "AnomalousActivity",
+    AlertDescription = strcat("User ", User, " performed ", OffHoursCount, " sensitive operations outside business hours"),
+    RecommendedAction = "Verify legitimate business need, check if user account is compromised"
+| project TimeGenerated, User, UserRole, SourceIP, OffHoursCount, Actions, MaxSeverityAction, Severity, ThreatCategory, AlertDescription, RecommendedAction;
+
+// ===========================================
+// RULE 6: MFA Bypass Detection
+// ===========================================  
+let MFABypassDetection =
+AuthZLogs
+| where TimeGenerated > ago(20m)
+| where Action has_any ("unmask_pii_with_mfa", "cross_region_override", "manage_users")
+| where MFARequired == true and MFAPresent == false
+| where Decision == "allow"
+| summarize
+    BypassCount = count(),
+    Actions = make_set(Action)
+  by User, UserRole, SourceIP, bin(TimeGenerated, 5m)
+| where BypassCount >= 1 // Any MFA bypass is critical
+| extend
+    Severity = "Critical",
+    ThreatCategory = "AuthenticationBypass",
+    AlertDescription = strcat("User ", User, " bypassed MFA requirements for ", BypassCount, " sensitive operations"),
+    RecommendedAction = "IMMEDIATE: Disable user account, investigate authentication system, check for system compromise"
+| project TimeGenerated, User, UserRole, SourceIP, BypassCount, Actions, Severity, ThreatCategory, AlertDescription, RecommendedAction;
+
+// ===========================================
+// RULE 7: Failed Authentication Brute Force
+// ===========================================
+let BruteForceDetection =
+AuthZLogs
+| where TimeGenerated > ago(10m)
+| where EventType == "authentication_failure"
+| summarize
+    FailureCount = count(),
+    UniqueUsers = dcount(User),
+    Users = make_set(User)
+  by SourceIP, bin(TimeGenerated, 2m)
+| where FailureCount >= 10 or UniqueUsers >= 5
+| extend
+    Severity = iff(FailureCount >= 20, "High", "Medium"),
+    ThreatCategory = "BruteForceAttack",
+    AlertDescription = strcat("IP ", SourceIP, " generated ", FailureCount, " authentication failures against ", UniqueUsers, " users"),
+    RecommendedAction = "Block IP address, investigate attack source, check for credential stuffing"
+| project TimeGenerated, SourceIP, FailureCount, UniqueUsers, Users, Severity, ThreatCategory, AlertDescription, RecommendedAction;
+
+// ===========================================
+// RULE 8: Suspicious Role Assignment Pattern  
+// ===========================================
+let SuspiciousRoleAssignmentDetection =
+AuthZLogs
+| where TimeGenerated > ago(30m)
+| where Action == "assign_roles"
+| where Decision == "allow"
+| where ResultMetadata has_any ("iam_admin", "app_admin", "regional_manager")
+| summarize
+    HighPrivRoleAssignments = count(),
+    AssignedRoles = make_set(tostring(ResultMetadata.assignedRole)),
+    TargetUsers = make_set(tostring(ResultMetadata.targetUser))
+  by User, UserRole, bin(TimeGenerated, 10m)
+| where HighPrivRoleAssignments >= 3
+| extend
+    Severity = "High", 
+    ThreatCategory = "PrivilegeEscalation",
+    AlertDescription = strcat("User ", User, " assigned ", HighPrivRoleAssignments, " high-privilege roles: ", strcat_array(AssignedRoles, ", ")),
+    RecommendedAction = "Review role assignments for legitimacy, check approval workflow, investigate admin account"
+| project TimeGenerated, User, UserRole, HighPrivRoleAssignments, AssignedRoles, TargetUsers, Severity, ThreatCategory, AlertDescription, RecommendedAction;
+
+// ===========================================
+// RULE 9: Anomalous Authorization Volume
+// ===========================================
+let AnomalousVolumeDetection =
+AuthZLogs
+| where TimeGenerated > ago(15m)
+| where Decision == "allow"
+| summarize
+    AuthzCount = count(),
+    UniqueActions = dcount(Action),
+    Actions = make_set(Action)
+  by User, bin(TimeGenerated, 5m)
+| join kind=leftouter (
+    AuthZLogs
+    | where TimeGenerated between (ago(1d) .. ago(1h))
+    | summarize BaselineCount = avg(todouble(count())) by User
+  ) on User
+| extend BaselineCount = iff(isnull(BaselineCount), 10.0, BaselineCount)
+| where AuthzCount > (BaselineCount * 5) and AuthzCount >= 100
+| extend
+    AnomalyMultiplier = round(AuthzCount / BaselineCount, 1),
+    Severity = iff(AnomalyMultiplier >= 10, "High", "Medium"),
+    ThreatCategory = "AnomalousActivity",
+    AlertDescription = strcat("User ", User, " made ", AuthzCount, " authorization requests (", AnomalyMultiplier, "x baseline)"),
+    RecommendedAction = "Investigate user activity, check for automated tools or compromise"
+| project TimeGenerated, User, AuthzCount, BaselineCount, AnomalyMultiplier, UniqueActions, Actions, Severity, ThreatCategory, AlertDescription, RecommendedAction;
+
+// ===========================================
+// RULE 10: Policy Engine Health Anomalies
+// ===========================================
+let PolicyEngineHealthDetection =
+AuthZLogs
+| where TimeGenerated > ago(5m)
+| summarize
+    TotalRequests = count(),
+    ErrorRate = (todouble(countif(Decision == "error")) / todouble(count())) * 100,
+    AvgLatencyMs = avg(todouble(LatencyMs)),
+    P95LatencyMs = percentile(todouble(LatencyMs), 95),
+    UniqueErrors = dcount(ErrorMessage),
+    ErrorMessages = make_set(ErrorMessage)
+  by ServiceName, bin(TimeGenerated, 1m)
+| where ErrorRate > 0.1 or P95LatencyMs > 50 or UniqueErrors >= 5
+| extend
+    Severity = iff(ErrorRate > 1.0 or P95LatencyMs > 200, "Critical", iff(ErrorRate > 0.5 or P95LatencyMs > 100, "High", "Medium")),
+    ThreatCategory = "ServiceDegradation",
+    AlertDescription = strcat("AuthZ service ", ServiceName, " - Error rate: ", round(ErrorRate, 2), "%, P95 latency: ", round(P95LatencyMs, 0), "ms"),
+    RecommendedAction = "Check service health, investigate performance issues, verify policy bundle integrity"
+| project TimeGenerated, ServiceName, TotalRequests, ErrorRate, AvgLatencyMs, P95LatencyMs, UniqueErrors, ErrorMessages, Severity, ThreatCategory, AlertDescription, RecommendedAction;
+
+// ===========================================
+// COMBINE ALL DETECTIONS
+// ===========================================
+union 
+    PrivilegeEscalationDetection,
+    PolicyTamperingDetection, 
+    BulkPIIExfiltrationDetection,
+    CrossRegionAbuseDetection,
+    OffHoursSensitiveOpsDetection,
+    MFABypassDetection,
+    BruteForceDetection,
+    SuspiciousRoleAssignmentDetection,
+    AnomalousVolumeDetection,
+    PolicyEngineHealthDetection
+| extend 
+    DetectionRule = case(
+        ThreatCategory == "PrivilegeEscalation", "AUTHZ-001",
+        ThreatCategory == "PolicyManipulation", "AUTHZ-002", 
+        ThreatCategory == "DataExfiltration", "AUTHZ-003",
+        ThreatCategory == "LateralMovement", "AUTHZ-004",
+        ThreatCategory == "AnomalousActivity", "AUTHZ-005",
+        ThreatCategory == "AuthenticationBypass", "AUTHZ-006",
+        ThreatCategory == "BruteForceAttack", "AUTHZ-007",
+        ThreatCategory == "ServiceDegradation", "AUTHZ-010",
+        "AUTHZ-UNKNOWN"
+    ),
+    AlertId = strcat(DetectionRule, "-", format_datetime(TimeGenerated, "yyyyMMdd-HHmmss"))
+| order by Severity desc, TimeGenerated desc
+| project 
+    AlertId,
+    TimeGenerated,
+    DetectionRule,
+    Severity,
+    ThreatCategory, 
+    AlertDescription,
+    RecommendedAction,
+    User,
+    SourceIP = iff(isempty(SourceIP), "N/A", SourceIP),
+    ServiceName = iff(isempty(ServiceName), "N/A", ServiceName),
+    // Additional context fields vary by detection type
+    AttemptCount = iff(isempty(AttemptCount), toint(0), AttemptCount),
+    PIIAccessCount = iff(isempty(PIIAccessCount), toint(0), PIIAccessCount),
+    OverrideCount = iff(isempty(OverrideCount), toint(0), OverrideCount),
+    BypassCount = iff(isempty(BypassCount), toint(0), BypassCount),
+    ErrorRate = iff(isempty(ErrorRate), todouble(0.0), ErrorRate)

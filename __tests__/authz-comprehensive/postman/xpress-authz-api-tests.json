@@ -1,0 +1,1499 @@
+{
+  "info": {
+    "name": "Xpress Ops Tower - AuthZ API Testing",
+    "description": "Comprehensive authorization testing for Xpress Ops Tower APIs\n\nTest Categories:\n- RBAC Permission Validation\n- Regional Access Control\n- PII Masking & MFA Enforcement\n- Cross-Region Override Paths\n- Temporal Access Control\n- Security Exploit Prevention\n\nPhilippines Regions: NCR-Manila, Cebu, Davao\nSLO Targets: <200ms API response, 99.9% authorization consistency",
+    "version": "1.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{auth_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "{{base_url}}",
+      "type": "string"
+    },
+    {
+      "key": "api_version",
+      "value": "v1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Setup & Authentication",
+      "item": [
+        {
+          "name": "Get Ground Ops Token (Manila)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Authentication successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.access_token).to.exist;",
+                  "    pm.environment.set('ground_ops_manila_token', response.access_token);",
+                  "});",
+                  "",
+                  "pm.test('Token contains correct claims', function () {",
+                  "    const response = pm.response.json();",
+                  "    const payload = JSON.parse(atob(response.access_token.split('.')[1]));",
+                  "    pm.expect(payload.role).to.equal('ground_ops');",
+                  "    pm.expect(payload.region).to.equal('ph-ncr-manila');",
+                  "    pm.expect(payload.pii_scope).to.equal('none');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "ground.ops.manila@xpress.test",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{ground_ops_password}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"ground.ops.manila@xpress.test\",\n  \"password\": \"{{ground_ops_password}}\",\n  \"mfa_code\": null\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Get Expansion Manager Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Expansion Manager authentication successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.access_token).to.exist;",
+                  "    pm.environment.set('expansion_manager_token', response.access_token);",
+                  "});",
+                  "",
+                  "pm.test('Token contains expansion manager claims', function () {",
+                  "    const response = pm.response.json();",
+                  "    const payload = JSON.parse(atob(response.access_token.split('.')[1]));",
+                  "    pm.expect(payload.role).to.equal('expansion_manager');",
+                  "    pm.expect(payload.level).to.equal(45);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"expansion.manager@xpress.test\",\n  \"password\": \"{{expansion_manager_password}}\",\n  \"mfa_code\": null\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Get Risk Investigator Token (MFA)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('MFA authentication successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.access_token).to.exist;",
+                  "    pm.environment.set('risk_investigator_token', response.access_token);",
+                  "});",
+                  "",
+                  "pm.test('Token contains MFA claim', function () {",
+                  "    const response = pm.response.json();",
+                  "    const payload = JSON.parse(atob(response.access_token.split('.')[1]));",
+                  "    pm.expect(payload.mfa_verified).to.be.true;",
+                  "    pm.expect(payload.pii_scope).to.equal('full');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"risk.investigator@xpress.test\",\n  \"password\": \"{{risk_investigator_password}}\",\n  \"mfa_code\": \"{{totp_code}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "auth", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "RBAC Permission Validation",
+      "item": [
+        {
+          "name": "Ground Ops - List Available Drivers (Allowed)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Ground ops can list drivers', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.data).to.be.an('array');",
+                  "    pm.expect(response.data.length).to.be.greaterThan(0);",
+                  "});",
+                  "",
+                  "pm.test('Response time within SLO', function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(200);",
+                  "});",
+                  "",
+                  "pm.test('Only Manila region drivers returned', function () {",
+                  "    const response = pm.response.json();",
+                  "    response.data.forEach(driver => {",
+                  "        pm.expect(driver.region_id).to.equal('ph-ncr-manila');",
+                  "    });",
+                  "});",
+                  "",
+                  "pm.test('PII fields are masked', function () {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data.length > 0) {",
+                  "        const driver = response.data[0];",
+                  "        pm.expect(driver.phone_number).to.match(/\\*+/);",
+                  "        pm.expect(driver.email).to.include('***');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ground_ops_manila_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Region-Context",
+                "value": "ph-ncr-manila"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/drivers?status=available",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "drivers"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "available"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Ground Ops - Access User Management (Denied)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Ground ops denied user management access', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.error).to.include('insufficient_permissions');",
+                  "});",
+                  "",
+                  "pm.test('Error message contains security details', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.details.required_permission).to.equal('manage_users');",
+                  "    pm.expect(response.details.user_role).to.equal('ground_ops');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ground_ops_manila_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/admin/users",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "admin", "users"]
+            }
+          }
+        },
+        {
+          "name": "Regional Manager - Approve Temporary Access",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Regional manager can approve temp access', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.approval_status).to.equal('approved');",
+                  "});",
+                  "",
+                  "pm.test('Approval includes audit trail', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.approved_by).to.exist;",
+                  "    pm.expect(response.approval_timestamp).to.exist;",
+                  "    pm.expect(response.expiry_timestamp).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{regional_manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"request_id\": \"TEMP-ACCESS-001\",\n  \"requesting_user\": \"usr-support-001\",\n  \"target_region\": \"ph-vis-cebu\",\n  \"justification\": \"Customer escalation case CASE-SUPPORT-CEBU-001\",\n  \"duration_hours\": 4\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/access/temporary/approve",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "access", "temporary", "approve"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Regional Access Control",
+      "item": [
+        {
+          "name": "Cross-Region Access Attempt (Blocked)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Cross-region access blocked', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.error).to.include('regional_access_denied');",
+                  "});",
+                  "",
+                  "pm.test('Security metadata logged', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.security_event).to.exist;",
+                  "    pm.expect(response.security_event.type).to.equal('unauthorized_region_access');",
+                  "    pm.expect(response.security_event.source_region).to.equal('ph-ncr-manila');",
+                  "    pm.expect(response.security_event.target_region).to.equal('ph-vis-cebu');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ground_ops_manila_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Region-Context",
+                "value": "ph-vis-cebu"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/drivers?region=ph-vis-cebu",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "drivers"],
+              "query": [
+                {
+                  "key": "region",
+                  "value": "ph-vis-cebu"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Support Cross-Region with Valid Case",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Support cross-region access granted with case', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.data).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test('Cross-region override logged', function () {",
+                  "    const responseHeaders = pm.response.headers;",
+                  "    pm.expect(responseHeaders.get('X-Access-Override')).to.equal('cross_region_support');",
+                  "    pm.expect(responseHeaders.get('X-Case-Reference')).to.exist;",
+                  "});",
+                  "",
+                  "pm.test('Data still regionally filtered', function () {",
+                  "    const response = pm.response.json();",
+                  "    response.data.forEach(driver => {",
+                  "        pm.expect(driver.region_id).to.equal('ph-vis-cebu');",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{support_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Region-Context",
+                "value": "ph-vis-cebu"
+              },
+              {
+                "key": "X-Case-ID",
+                "value": "CASE-SUPPORT-CEBU-001"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/drivers?region=ph-vis-cebu&status=active",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "drivers"],
+              "query": [
+                {
+                  "key": "region",
+                  "value": "ph-vis-cebu"
+                },
+                {
+                  "key": "status",
+                  "value": "active"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Invalid Region Rejection",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Invalid region rejected', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.error).to.include('invalid_region');",
+                  "});",
+                  "",
+                  "pm.test('Region validation message clear', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.details.valid_regions).to.include.members([",
+                  "        'ph-ncr-manila', 'ph-vis-cebu', 'ph-min-davao'",
+                  "    ]);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ground_ops_manila_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Region-Context",
+                "value": "us-california"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/drivers?region=us-california",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "drivers"],
+              "query": [
+                {
+                  "key": "region",
+                  "value": "us-california"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "PII Masking & MFA Enforcement",
+      "item": [
+        {
+          "name": "PII Unmasking Without MFA (Blocked)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('PII unmasking blocked without MFA', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.error).to.include('mfa_required');",
+                  "});",
+                  "",
+                  "pm.test('MFA step-up challenge provided', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.mfa_challenge).to.exist;",
+                  "    pm.expect(response.mfa_challenge.challenge_id).to.exist;",
+                  "    pm.expect(response.mfa_challenge.expires_at).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{risk_investigator_no_mfa_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"driver_id\": \"drv-manila-001\",\n  \"fields\": [\"phone_number\", \"email\", \"license_number\"],\n  \"justification\": \"Investigation case INV-FRAUD-001\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/drivers/unmask-pii",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "drivers", "unmask-pii"]
+            }
+          }
+        },
+        {
+          "name": "PII Unmasking With Valid MFA",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('PII unmasking successful with MFA', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.unmasked_data).to.exist;",
+                  "});",
+                  "",
+                  "pm.test('Unmasked data contains real values', function () {",
+                  "    const response = pm.response.json();",
+                  "    const data = response.unmasked_data;",
+                  "    pm.expect(data.phone_number).to.not.include('*');",
+                  "    pm.expect(data.email).to.not.include('***');",
+                  "    pm.expect(data.license_number).to.not.include('XXX');",
+                  "});",
+                  "",
+                  "pm.test('PII access audit logged', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.audit_log).to.exist;",
+                  "    pm.expect(response.audit_log.access_type).to.equal('pii_unmask');",
+                  "    pm.expect(response.audit_log.mfa_method).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{risk_investigator_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-MFA-Challenge-Response",
+                "value": "{{mfa_challenge_response}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"driver_id\": \"drv-manila-001\",\n  \"fields\": [\"phone_number\", \"email\", \"license_number\"],\n  \"justification\": \"Investigation case INV-FRAUD-001\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/drivers/unmask-pii",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "drivers", "unmask-pii"]
+            }
+          }
+        },
+        {
+          "name": "Bulk PII Export Limitation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Bulk PII export limited', function () {",
+                  "    if (pm.response.code === 200) {",
+                  "        const response = pm.response.json();",
+                  "        pm.expect(response.data.length).to.be.at.most(100);",
+                  "        pm.expect(response.export_limited).to.be.true;",
+                  "    } else if (pm.response.code === 403) {",
+                  "        const response = pm.response.json();",
+                  "        pm.expect(response.error).to.include('bulk_export_denied');",
+                  "    } else {",
+                  "        pm.test.skip('Unexpected response code');",
+                  "    }",
+                  "});",
+                  "",
+                  "pm.test('Export audit trail created', function () {",
+                  "    if (pm.response.code === 200) {",
+                  "        const responseHeaders = pm.response.headers;",
+                  "        pm.expect(responseHeaders.get('X-Export-Audit-ID')).to.exist;",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{analyst_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"export_type\": \"driver_analytics\",\n  \"region_id\": \"ph-ncr-manila\",\n  \"date_range\": {\n    \"start\": \"2024-01-01\",\n    \"end\": \"2024-01-31\"\n  },\n  \"fields\": [\"phone_number\", \"email\", \"trip_count\", \"rating\"],\n  \"limit\": 5000\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/exports/drivers",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "exports", "drivers"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Temporal Access Control",
+      "item": [
+        {
+          "name": "Time-Based Access Restriction",
+          "event": [
+            {
+              "listen": "pre-request",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Simulate off-hours access attempt",
+                  "pm.request.headers.add({",
+                  "    key: 'X-Simulated-Time',",
+                  "    value: '2024-01-01T02:00:00Z' // 2 AM",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('After-hours access restricted', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.error).to.include('temporal_restriction');",
+                  "});",
+                  "",
+                  "pm.test('Time restriction details provided', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.details.allowed_hours).to.exist;",
+                  "    pm.expect(response.details.current_time).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{night_ops_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/reports/financial?period=daily",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "reports", "financial"],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "daily"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Emergency Override Access",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Emergency override successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.data).to.exist;",
+                  "});",
+                  "",
+                  "pm.test('Emergency access logged', function () {",
+                  "    const responseHeaders = pm.response.headers;",
+                  "    pm.expect(responseHeaders.get('X-Emergency-Override')).to.equal('active');",
+                  "    pm.expect(responseHeaders.get('X-Override-Justification')).to.exist;",
+                  "});",
+                  "",
+                  "pm.test('Override expires appropriately', function () {",
+                  "    const responseHeaders = pm.response.headers;",
+                  "    const expiryTime = new Date(responseHeaders.get('X-Override-Expires'));",
+                  "    const now = new Date();",
+                  "    const timeDiff = expiryTime.getTime() - now.getTime();",
+                  "    pm.expect(timeDiff).to.be.below(4 * 60 * 60 * 1000); // 4 hours max",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{regional_manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Emergency-Override",
+                "value": "true"
+              },
+              {
+                "key": "X-Emergency-Justification",
+                "value": "Critical system incident - Driver safety concern"
+              },
+              {
+                "key": "X-Incident-ID",
+                "value": "INC-EMERGENCY-001"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/system/emergency/driver-locations",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "system", "emergency", "driver-locations"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Security Exploit Prevention",
+      "item": [
+        {
+          "name": "Token Replay Attack Prevention",
+          "event": [
+            {
+              "listen": "pre-request",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Use the same token from a different IP/context",
+                  "pm.request.headers.add({",
+                  "    key: 'X-Forwarded-For',",
+                  "    value: '192.168.1.100' // Different IP",
+                  "});",
+                  "",
+                  "pm.request.headers.add({",
+                  "    key: 'X-Original-Region',",
+                  "    value: 'ph-vis-cebu' // Different region context",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Token replay attack blocked', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.error).to.include('suspicious_token_usage');",
+                  "});",
+                  "",
+                  "pm.test('Security alert generated', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.security_alert).to.exist;",
+                  "    pm.expect(response.security_alert.type).to.equal('token_replay_attempt');",
+                  "    pm.expect(response.security_alert.risk_score).to.be.above(7);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ground_ops_manila_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/drivers?region=ph-vis-cebu",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "drivers"],
+              "query": [
+                {
+                  "key": "region",
+                  "value": "ph-vis-cebu"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "SQL Injection Prevention",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('SQL injection attempt blocked', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.error).to.include('invalid_parameter');",
+                  "});",
+                  "",
+                  "pm.test('Injection attempt logged', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.security_event).to.exist;",
+                  "    pm.expect(response.security_event.type).to.equal('injection_attempt');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ground_ops_manila_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/drivers?status='; DROP TABLE drivers; --",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "drivers"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "'; DROP TABLE drivers; --"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Privilege Escalation Prevention",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Privilege escalation blocked', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.error).to.include('privilege_escalation_attempt');",
+                  "});",
+                  "",
+                  "pm.test('Escalation attempt details logged', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.security_event.attempted_role).to.equal('iam_admin');",
+                  "    pm.expect(response.security_event.current_role).to.equal('ground_ops');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ground_ops_manila_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Role-Override",
+                "value": "iam_admin"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"usr-ground-ops-001\",\n  \"new_role\": \"iam_admin\",\n  \"justification\": \"Emergency escalation\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/admin/users/modify-role",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "admin", "users", "modify-role"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Expansion Manager Role Tests",
+      "item": [
+        {
+          "name": "T-11: Create Region Request (Allowed)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Expansion manager can create region request', function () {",
+                  "    pm.response.to.have.status(202);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.request_id).to.exist;",
+                  "    pm.expect(response.status).to.equal('pending_review');",
+                  "});",
+                  "",
+                  "pm.test('Audit ID included in response', function () {",
+                  "    const auditId = pm.response.headers.get('x-audit-id');",
+                  "    pm.expect(auditId).to.exist;",
+                  "    pm.expect(auditId).to.match(/^REGION-REQUEST-/);",
+                  "});",
+                  "",
+                  "pm.test('Required audit fields validated', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.audit_trail).to.exist;",
+                  "    pm.expect(response.audit_trail.market_analysis).to.exist;",
+                  "    pm.expect(response.audit_trail.business_case).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{expansion_manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"region_id\": \"ph-pal-puerto\",\n  \"region_name\": \"Puerto Princesa\",\n  \"market_analysis\": \"High tourism demand, limited transport options\",\n  \"business_case\": \"Projected 15% market share within 6 months\",\n  \"target_launch_date\": \"2024-12-01\",\n  \"initial_fleet_size\": 25\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/regions/requests",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "regions", "requests"]
+            }
+          }
+        },
+        {
+          "name": "T-12: PII Unmask Denied (Forbidden)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Expansion manager denied PII unmask access', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.error).to.include('insufficient_permissions');",
+                  "});",
+                  "",
+                  "pm.test('Security violation logged', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.security_event).to.exist;",
+                  "    pm.expect(response.security_event.type).to.equal('unauthorized_pii_access_attempt');",
+                  "    pm.expect(response.security_event.role).to.equal('expansion_manager');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{expansion_manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"driver_id\": \"drv-manila-001\",\n  \"fields\": [\"phone_number\", \"email\"],\n  \"justification\": \"Region expansion research\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/investigations/pii-unmask",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "investigations", "pii-unmask"]
+            }
+          }
+        },
+        {
+          "name": "T-13: Configure Prelaunch Pricing (Flagged)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Prelaunch pricing config returns pending status', function () {",
+                  "    pm.response.to.have.status(202);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.status).to.equal('pending_approval');",
+                  "    pm.expect(response.requires_dual_control).to.be.true;",
+                  "});",
+                  "",
+                  "pm.test('Dual control workflow initiated', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.approval_workflow).to.exist;",
+                  "    pm.expect(response.approval_workflow.primary_action).to.equal('expansion_manager:configure_prelaunch_pricing_flagged');",
+                  "    pm.expect(response.approval_workflow.required_secondary).to.equal('app_admin:activate_feature_flag');",
+                  "});",
+                  "",
+                  "pm.test('Configuration flagged for approval', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.config_status).to.equal('flagged');",
+                  "    pm.expect(response.active).to.be.false;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{expansion_manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"region_id\": \"ph-pal-puerto\",\n  \"pricing_strategy\": \"competitive_entry\",\n  \"base_fare\": 50.00,\n  \"per_km_rate\": 12.00,\n  \"market_segment\": \"tourism_focused\",\n  \"promotional_discount\": 0.20\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/regions/{{region_id}}/pricing/prelaunch",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "regions", "{{region_id}}", "pricing", "prelaunch"]
+            }
+          }
+        },
+        {
+          "name": "T-14: Active Region Access Denied (Region State)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Active region access denied for expansion manager', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.error).to.include('RegionStateForbidden');",
+                  "});",
+                  "",
+                  "pm.test('Region state validation enforced', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.details.region_state).to.equal('active');",
+                  "    pm.expect(response.details.allowed_states).to.include.members(['prospect', 'pilot']);",
+                  "    pm.expect(response.details.role).to.equal('expansion_manager');",
+                  "});",
+                  "",
+                  "pm.test('Expansion scope violation logged', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.security_event).to.exist;",
+                  "    pm.expect(response.security_event.type).to.equal('expansion_scope_violation');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{expansion_manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"modify_pricing\",\n  \"justification\": \"Market adjustment needed\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/regions/ph-ncr-manila/operations",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "regions", "ph-ncr-manila", "operations"]
+            }
+          }
+        },
+        {
+          "name": "T-15: Promote Region Stage (Prospect to Pilot)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Region promotion initiated successfully', function () {",
+                  "    pm.response.to.have.status(202);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.promotion_status).to.equal('pending_executive_approval');",
+                  "});",
+                  "",
+                  "pm.test('Dual control requirement enforced', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.dual_control).to.be.true;",
+                  "    pm.expect(response.required_approver_role).to.equal('executive');",
+                  "});",
+                  "",
+                  "pm.test('Region state transition logged', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.state_transition).to.exist;",
+                  "    pm.expect(response.state_transition.from_state).to.equal('prospect');",
+                  "    pm.expect(response.state_transition.to_state).to.equal('pilot');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{expansion_manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"region_id\": \"ph-pal-puerto\",\n  \"stage_from\": \"prospect\",\n  \"stage_to\": \"pilot\",\n  \"readiness_checklist\": [\n    \"driver_recruitment_complete\",\n    \"regulatory_approvals_obtained\",\n    \"local_partnerships_established\",\n    \"initial_marketing_campaign_ready\"\n  ],\n  \"launch_date\": \"2024-10-15\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/regions/promote",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "regions", "promote"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Performance & SLO Validation",
+      "item": [
+        {
+          "name": "API Response Time SLO Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Response time within SLO (<200ms)', function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(200);",
+                  "});",
+                  "",
+                  "pm.test('Authorization latency acceptable', function () {",
+                  "    const authLatency = pm.response.headers.get('X-Auth-Latency-Ms');",
+                  "    if (authLatency) {",
+                  "        pm.expect(parseInt(authLatency)).to.be.below(50);",
+                  "    }",
+                  "});",
+                  "",
+                  "pm.test('Policy evaluation metrics present', function () {",
+                  "    const policyLatency = pm.response.headers.get('X-Policy-Eval-Ms');",
+                  "    const cacheHit = pm.response.headers.get('X-Policy-Cache-Hit');",
+                  "    pm.expect(policyLatency).to.exist;",
+                  "    pm.expect(cacheHit).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ops_manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/dashboard/overview?region=ph-ncr-manila",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "dashboard", "overview"],
+              "query": [
+                {
+                  "key": "region",
+                  "value": "ph-ncr-manila"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Concurrent Request Handling",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Concurrent requests handled successfully', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('No authorization conflicts under load', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.data).to.be.an('array');",
+                  "    pm.expect(response.authorization_errors).to.be.undefined;",
+                  "});",
+                  "",
+                  "pm.test('Performance degradation minimal', function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(500); // Slightly higher for load",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ground_ops_manila_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Load-Test",
+                "value": "concurrent_auth"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/drivers?status=available&limit=100",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "drivers"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "available"
+                },
+                {
+                  "key": "limit",
+                  "value": "100"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global pre-request setup",
+          "if (!pm.environment.get('base_url')) {",
+          "    pm.environment.set('base_url', 'https://ops-tower-dev.xpress.ph');",
+          "}",
+          "",
+          "// Add request tracking for audit",
+          "const requestId = pm.variables.replaceIn('{{$randomUUID}}');",
+          "pm.request.headers.add({",
+          "    key: 'X-Request-ID',",
+          "    value: requestId",
+          "});",
+          "",
+          "// Add test execution timestamp",
+          "pm.request.headers.add({",
+          "    key: 'X-Test-Timestamp',",
+          "    value: new Date().toISOString()",
+          "});"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global post-response validation",
+          "pm.test('Valid JSON response structure', function () {",
+          "    if (pm.response.headers.get('Content-Type') && ",
+          "        pm.response.headers.get('Content-Type').includes('application/json')) {",
+          "        pm.response.to.be.json;",
+          "    }",
+          "});",
+          "",
+          "pm.test('Security headers present', function () {",
+          "    pm.expect(pm.response.headers.get('X-Content-Type-Options')).to.equal('nosniff');",
+          "    pm.expect(pm.response.headers.get('X-Frame-Options')).to.exist;",
+          "    pm.expect(pm.response.headers.get('Strict-Transport-Security')).to.exist;",
+          "});",
+          "",
+          "// Log performance metrics",
+          "console.log(`Request: ${pm.info.requestName}, Response Time: ${pm.response.responseTime}ms`);"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,294 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vehicle-management-service
+  namespace: ops-tower
+  labels:
+    app: vehicle-management
+    component: backend
+    version: v1.0.0
+    tier: application
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: vehicle-management
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: vehicle-management
+        component: backend
+        version: v1.0.0
+      annotations:
+        sidecar.istio.io/inject: "true"
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3001"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: vehicle-management-sa
+      containers:
+      - name: vehicle-management
+        image: ops-tower/vehicle-management:latest
+        ports:
+        - containerPort: 3000
+          name: http
+          protocol: TCP
+        - containerPort: 3001
+          name: metrics
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: vehicle-db-secret
+              key: connection-string
+        - name: REDIS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: cache-config
+              key: redis-url
+        - name: INFLUXDB_URL
+          valueFrom:
+            configMapKeyRef:
+              name: telemetrics-config
+              key: influxdb-url
+        - name: ELASTICSEARCH_URL
+          valueFrom:
+            configMapKeyRef:
+              name: logging-config
+              key: elasticsearch-url
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: auth-secret
+              key: jwt-secret
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: config-volume
+          mountPath: /app/config
+          readOnly: true
+        - name: logs-volume
+          mountPath: /app/logs
+      volumes:
+      - name: config-volume
+        configMap:
+          name: vehicle-management-config
+      - name: logs-volume
+        emptyDir: {}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - vehicle-management
+              topologyKey: kubernetes.io/hostname
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vehicle-management-service
+  namespace: ops-tower
+  labels:
+    app: vehicle-management
+    component: backend
+spec:
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  - port: 3001
+    targetPort: 3001
+    protocol: TCP
+    name: metrics
+  selector:
+    app: vehicle-management
+    component: backend
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vehicle-management-sa
+  namespace: ops-tower
+  labels:
+    app: vehicle-management
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vehicle-management-config
+  namespace: ops-tower
+  labels:
+    app: vehicle-management
+data:
+  database.yaml: |
+    primary:
+      host: postgres-primary.database.svc.cluster.local
+      port: 5432
+      database: vehicle_management
+    replica:
+      host: postgres-replica.database.svc.cluster.local
+      port: 5432
+      database: vehicle_management
+  cache.yaml: |
+    redis:
+      cluster:
+        - host: redis-cluster-0.cache.svc.cluster.local
+          port: 6379
+        - host: redis-cluster-1.cache.svc.cluster.local
+          port: 6379
+        - host: redis-cluster-2.cache.svc.cluster.local
+          port: 6379
+  telemetrics.yaml: |
+    influxdb:
+      host: influxdb.telemetrics.svc.cluster.local
+      port: 8086
+      database: vehicle_telemetrics
+      retention: 30d
+  integration.yaml: |
+    services:
+      driver_management:
+        endpoint: http://driver-service.ops-tower.svc.cluster.local
+      booking_service:
+        endpoint: http://booking-service.ops-tower.svc.cluster.local
+      notification_service:
+        endpoint: http://notification-service.ops-tower.svc.cluster.local
+      pricing_service:
+        endpoint: http://pricing-service.ops-tower.svc.cluster.local
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: vehicle-management-vs
+  namespace: ops-tower
+  labels:
+    app: vehicle-management
+spec:
+  hosts:
+  - vehicle-api.ops-tower.local
+  gateways:
+  - ops-tower-gateway
+  http:
+  - match:
+    - uri:
+        prefix: "/api/vehicles"
+    - uri:
+        prefix: "/api/integration/vehicle"
+    route:
+    - destination:
+        host: vehicle-management-service.ops-tower.svc.cluster.local
+        port:
+          number: 80
+      weight: 100
+    fault:
+      delay:
+        percentage:
+          value: 0.1
+        fixedDelay: 5s
+    retries:
+      attempts: 3
+      perTryTimeout: 10s
+      retryOn: gateway-error,connect-failure,refused-stream
+    timeout: 30s
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: vehicle-management-dr
+  namespace: ops-tower
+  labels:
+    app: vehicle-management
+spec:
+  host: vehicle-management-service.ops-tower.svc.cluster.local
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 100
+      http:
+        http1MaxPendingRequests: 50
+        http2MaxRequests: 100
+        maxRequestsPerConnection: 10
+        maxRetries: 3
+        idleTimeout: 60s
+    loadBalancer:
+      simple: LEAST_CONN
+    outlierDetection:
+      consecutiveErrors: 3
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+      minHealthPercent: 30
+  subsets:
+  - name: v1
+    labels:
+      version: v1.0.0
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 50
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: vehicle-management-auth
+  namespace: ops-tower
+spec:
+  selector:
+    matchLabels:
+      app: vehicle-management
+  mtls:
+    mode: STRICT
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: vehicle-management-authz
+  namespace: ops-tower
+spec:
+  selector:
+    matchLabels:
+      app: vehicle-management
+  rules:
+  - from:
+    - source:
+        principals:
+        - "cluster.local/ns/ops-tower/sa/api-gateway-sa"
+        - "cluster.local/ns/ops-tower/sa/dashboard-sa"
+        - "cluster.local/ns/ops-tower/sa/notification-sa"
+  - to:
+    - operation:
+        methods: ["GET", "POST", "PUT", "DELETE"]
+        paths: ["/api/vehicles/*", "/health", "/ready", "/metrics"]
+  - when:
+    - key: source.ip
+      values: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]

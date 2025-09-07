@@ -1,0 +1,361 @@
+# Docker Compose for OBD Telemetry and Real-time Data Services
+# Xpress Ops Tower - Philippines Ridesharing Platform
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database for Telemetry Data
+  telemetry-db:
+    image: postgis/postgis:15-3.3
+    container_name: ops-tower-telemetry-db
+    environment:
+      POSTGRES_DB: xpress_telemetry
+      POSTGRES_USER: xpress_telemetry_user
+      POSTGRES_PASSWORD: ${TELEMETRY_DB_PASSWORD:-xpress_telemetry_secure_2024}
+      POSTGRES_MULTIPLE_DATABASES: "telemetry_partitions,obd_data,compliance_data"
+    volumes:
+      - telemetry_db_data:/var/lib/postgresql/data
+      - ./database/telemetry:/docker-entrypoint-initdb.d
+    ports:
+      - "${TELEMETRY_DB_PORT:-5433}:5432"
+    networks:
+      - telemetry-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U xpress_telemetry_user -d xpress_telemetry"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # Redis for Caching and Real-time Data
+  telemetry-redis:
+    image: redis:7-alpine
+    container_name: ops-tower-telemetry-redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-xpress_redis_secure_2024}
+    volumes:
+      - telemetry_redis_data:/data
+      - ./config/redis/telemetry-redis.conf:/etc/redis/redis.conf
+    ports:
+      - "${TELEMETRY_REDIS_PORT:-6380}:6379"
+    networks:
+      - telemetry-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # TimescaleDB for Time-series Telemetry Data
+  timescale-db:
+    image: timescale/timescaledb:latest-pg15
+    container_name: ops-tower-timescale
+    environment:
+      POSTGRES_DB: xpress_timeseries
+      POSTGRES_USER: timeseries_user
+      POSTGRES_PASSWORD: ${TIMESCALE_PASSWORD:-timescale_secure_2024}
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+      - ./database/timescale:/docker-entrypoint-initdb.d
+    ports:
+      - "${TIMESCALE_PORT:-5434}:5432"
+    networks:
+      - telemetry-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U timeseries_user -d xpress_timeseries"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Telemetry Data Processing Service
+  telemetry-processor:
+    build:
+      context: .
+      dockerfile: docker/telemetry/Dockerfile.processor
+    container_name: ops-tower-telemetry-processor
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: postgresql://xpress_telemetry_user:${TELEMETRY_DB_PASSWORD:-xpress_telemetry_secure_2024}@telemetry-db:5432/xpress_telemetry
+      TIMESCALE_URL: postgresql://timeseries_user:${TIMESCALE_PASSWORD:-timescale_secure_2024}@timescale-db:5432/xpress_timeseries
+      REDIS_URL: redis://:${REDIS_PASSWORD:-xpress_redis_secure_2024}@telemetry-redis:6379
+      
+      # Telemetry Configuration
+      TELEMETRY_PROCESSING_INTERVAL: ${TELEMETRY_PROCESSING_INTERVAL:-1000}
+      TELEMETRY_BATCH_SIZE: ${TELEMETRY_BATCH_SIZE:-100}
+      TELEMETRY_RETENTION_DAYS: ${TELEMETRY_RETENTION_DAYS:-90}
+      TELEMETRY_QUALITY_THRESHOLD: ${TELEMETRY_QUALITY_THRESHOLD:-0.8}
+      
+      # OBD Configuration
+      OBD_CONNECTION_TIMEOUT: ${OBD_CONNECTION_TIMEOUT:-30000}
+      OBD_MAX_RETRIES: ${OBD_MAX_RETRIES:-3}
+      OBD_HEALTH_CHECK_INTERVAL: ${OBD_HEALTH_CHECK_INTERVAL:-60000}
+      OBD_FIRMWARE_UPDATE_ENABLED: ${OBD_FIRMWARE_UPDATE_ENABLED:-false}
+      
+      # Alert Configuration
+      ALERT_PROCESSING_INTERVAL: ${ALERT_PROCESSING_INTERVAL:-30000}
+      ALERT_ESCALATION_TIMEOUT: ${ALERT_ESCALATION_TIMEOUT:-7200000}
+      MAX_NOTIFICATIONS_PER_BATCH: ${MAX_NOTIFICATIONS_PER_BATCH:-10}
+      ALERT_RETRY_ATTEMPTS: ${ALERT_RETRY_ATTEMPTS:-3}
+      
+      # Philippines Configuration
+      LTFRB_ENABLED: ${LTFRB_ENABLED:-true}
+      LTO_INTEGRATION: ${LTO_INTEGRATION:-false}
+      PAGASA_INTEGRATION: ${PAGASA_INTEGRATION:-false}
+      CODING_ENFORCEMENT: ${CODING_ENFORCEMENT:-true}
+      
+      # External APIs
+      WEATHER_API_ENABLED: ${WEATHER_API_ENABLED:-false}
+      TRAFFIC_API_ENABLED: ${TRAFFIC_API_ENABLED:-false}
+      VIOLATION_THRESHOLD: ${VIOLATION_THRESHOLD:-3}
+    volumes:
+      - ./logs/telemetry:/app/logs
+      - telemetry_uploads:/app/uploads
+    depends_on:
+      telemetry-db:
+        condition: service_healthy
+      timescale-db:
+        condition: service_healthy
+      telemetry-redis:
+        condition: service_healthy
+    networks:
+      - telemetry-network
+      - ops-tower-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # WebSocket Server for Real-time Updates
+  websocket-server:
+    build:
+      context: .
+      dockerfile: docker/telemetry/Dockerfile.websocket
+    container_name: ops-tower-websocket
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      WEBSOCKET_PORT: ${WEBSOCKET_PORT:-8080}
+      MAX_WS_CONNECTIONS: ${MAX_WS_CONNECTIONS:-1000}
+      WS_HEARTBEAT_INTERVAL: ${WS_HEARTBEAT_INTERVAL:-30000}
+      WS_BROADCAST_INTERVAL: ${WS_BROADCAST_INTERVAL:-5000}
+      
+      # Database connections
+      DATABASE_URL: postgresql://xpress_telemetry_user:${TELEMETRY_DB_PASSWORD:-xpress_telemetry_secure_2024}@telemetry-db:5432/xpress_telemetry
+      REDIS_URL: redis://:${REDIS_PASSWORD:-xpress_redis_secure_2024}@telemetry-redis:6379
+      
+      # Security
+      JWT_SECRET: ${JWT_SECRET:-your_jwt_secret_here}
+      WS_AUTH_ENABLED: ${WS_AUTH_ENABLED:-true}
+    ports:
+      - "${WEBSOCKET_EXTERNAL_PORT:-8080}:8080"
+    volumes:
+      - ./logs/websocket:/app/logs
+    depends_on:
+      telemetry-processor:
+        condition: service_healthy
+    networks:
+      - telemetry-network
+      - ops-tower-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Alert and Notification Service
+  alert-service:
+    build:
+      context: .
+      dockerfile: docker/telemetry/Dockerfile.alerts
+    container_name: ops-tower-alerts
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: postgresql://xpress_telemetry_user:${TELEMETRY_DB_PASSWORD:-xpress_telemetry_secure_2024}@telemetry-db:5432/xpress_telemetry
+      REDIS_URL: redis://:${REDIS_PASSWORD:-xpress_redis_secure_2024}@telemetry-redis:6379
+      
+      # Notification providers
+      SMS_PROVIDER: ${SMS_PROVIDER:-twilio}
+      SMS_API_KEY: ${SMS_API_KEY}
+      SMS_API_SECRET: ${SMS_API_SECRET}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-sendgrid}
+      EMAIL_API_KEY: ${EMAIL_API_KEY}
+      PUSH_NOTIFICATION_KEY: ${PUSH_NOTIFICATION_KEY}
+      
+      # Philippines-specific
+      LTFRB_API_URL: ${LTFRB_API_URL}
+      LTO_API_URL: ${LTO_API_URL}
+      PAGASA_API_KEY: ${PAGASA_API_KEY}
+    volumes:
+      - ./logs/alerts:/app/logs
+    depends_on:
+      telemetry-processor:
+        condition: service_healthy
+    networks:
+      - telemetry-network
+      - ops-tower-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Data Analytics and ML Service
+  analytics-service:
+    build:
+      context: .
+      dockerfile: docker/telemetry/Dockerfile.analytics
+    container_name: ops-tower-analytics
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: postgresql://xpress_telemetry_user:${TELEMETRY_DB_PASSWORD:-xpress_telemetry_secure_2024}@telemetry-db:5432/xpress_telemetry
+      TIMESCALE_URL: postgresql://timeseries_user:${TIMESCALE_PASSWORD:-timescale_secure_2024}@timescale-db:5432/xpress_timeseries
+      REDIS_URL: redis://:${REDIS_PASSWORD:-xpress_redis_secure_2024}@telemetry-redis:6379
+      
+      # ML Configuration
+      ML_MODEL_PATH: ${ML_MODEL_PATH:-/app/models}
+      ANOMALY_DETECTION_ENABLED: ${ANOMALY_DETECTION_ENABLED:-true}
+      PREDICTIVE_MAINTENANCE_ENABLED: ${PREDICTIVE_MAINTENANCE_ENABLED:-true}
+      DRIVER_SCORING_ENABLED: ${DRIVER_SCORING_ENABLED:-true}
+      
+      # Performance thresholds
+      ANOMALY_CONFIDENCE_THRESHOLD: ${ANOMALY_CONFIDENCE_THRESHOLD:-0.8}
+      PREDICTION_HORIZON_DAYS: ${PREDICTION_HORIZON_DAYS:-30}
+      MODEL_UPDATE_INTERVAL: ${MODEL_UPDATE_INTERVAL:-86400000}
+    volumes:
+      - ./logs/analytics:/app/logs
+      - ml_models:/app/models
+      - telemetry_exports:/app/exports
+    depends_on:
+      timescale-db:
+        condition: service_healthy
+      telemetry-processor:
+        condition: service_healthy
+    networks:
+      - telemetry-network
+      - ops-tower-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
+      interval: 60s
+      timeout: 20s
+      retries: 3
+
+  # NGINX Load Balancer for Telemetry Services
+  telemetry-nginx:
+    image: nginx:alpine
+    container_name: ops-tower-telemetry-nginx
+    volumes:
+      - ./config/nginx/telemetry.conf:/etc/nginx/nginx.conf
+      - ./config/nginx/ssl:/etc/nginx/ssl
+      - ./logs/nginx:/var/log/nginx
+    ports:
+      - "${TELEMETRY_NGINX_HTTP_PORT:-8081}:80"
+      - "${TELEMETRY_NGINX_HTTPS_PORT:-8443}:443"
+    depends_on:
+      - telemetry-processor
+      - websocket-server
+      - alert-service
+      - analytics-service
+    networks:
+      - telemetry-network
+      - ops-tower-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Prometheus for Telemetry Metrics
+  telemetry-prometheus:
+    image: prom/prometheus:latest
+    container_name: ops-tower-telemetry-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-30d}'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./config/prometheus/telemetry-prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./config/prometheus/telemetry-rules:/etc/prometheus/rules
+      - telemetry_prometheus_data:/prometheus
+    ports:
+      - "${TELEMETRY_PROMETHEUS_PORT:-9091}:9090"
+    networks:
+      - telemetry-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Grafana for Telemetry Dashboards
+  telemetry-grafana:
+    image: grafana/grafana:latest
+    container_name: ops-tower-telemetry-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${TELEMETRY_GRAFANA_PASSWORD:-xpress_grafana_2024}
+      GF_DATABASE_TYPE: postgres
+      GF_DATABASE_HOST: telemetry-db:5432
+      GF_DATABASE_NAME: xpress_telemetry
+      GF_DATABASE_USER: xpress_telemetry_user
+      GF_DATABASE_PASSWORD: ${TELEMETRY_DB_PASSWORD:-xpress_telemetry_secure_2024}
+      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-simple-json-datasource,grafana-worldmap-panel
+    volumes:
+      - telemetry_grafana_data:/var/lib/grafana
+      - ./config/grafana/telemetry-dashboards:/etc/grafana/provisioning/dashboards
+      - ./config/grafana/telemetry-datasources:/etc/grafana/provisioning/datasources
+    ports:
+      - "${TELEMETRY_GRAFANA_PORT:-3001}:3000"
+    depends_on:
+      - telemetry-prometheus
+      - telemetry-db
+    networks:
+      - telemetry-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  telemetry_db_data:
+    driver: local
+  telemetry_redis_data:
+    driver: local
+  timescale_data:
+    driver: local
+  telemetry_uploads:
+    driver: local
+  ml_models:
+    driver: local
+  telemetry_exports:
+    driver: local
+  telemetry_prometheus_data:
+    driver: local
+  telemetry_grafana_data:
+    driver: local
+
+networks:
+  telemetry-network:
+    driver: bridge
+    internal: false
+  ops-tower-network:
+    external: true
+
+# Health check script
+x-healthcheck: &healthcheck
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 30s

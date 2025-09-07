@@ -1,0 +1,695 @@
+// Xpress Ops Tower - Security Detection KQL Queries
+// Target: Azure Sentinel / Microsoft Defender
+// Coverage: AuthZ Security Events, PII Access Monitoring, Attack Detection
+// 
+// Query Categories:
+// 1. Authorization Violation Detection
+// 2. Cross-Region Access Anomalies
+// 3. PII Access Pattern Monitoring
+// 4. Token Security Events
+// 5. Privilege Escalation Attempts
+// 6. Temporal Access Violations
+// 7. Bulk Data Export Monitoring
+// 8. System Compromise Indicators
+
+// =============================================================================
+// 1. AUTHORIZATION VIOLATION DETECTION
+// =============================================================================
+
+// Query 1.1: Unauthorized API Access Attempts
+// Detects repeated authorization failures indicating potential attacks
+AppServiceHTTPLogs
+| where TimeGenerated > ago(1h)
+| where ScStatus == 403
+| where CsUriStem contains "/api/"
+| extend AuthError = extract(@"authorization_error:\s*([^,\]]+)", 1, tostring(Result))
+| where AuthError in ("insufficient_permissions", "invalid_role", "regional_access_denied")
+| summarize 
+    FailureCount = count(),
+    UniqueEndpoints = dcount(CsUriStem),
+    FirstFailure = min(TimeGenerated),
+    LastFailure = max(TimeGenerated),
+    UserAgents = make_set(CsUserAgent),
+    SourceIPs = make_set(ClientIP)
+    by CsUsername, AuthError
+| where FailureCount >= 5  // 5+ failures in 1 hour
+| extend 
+    SeverityScore = case(
+        FailureCount >= 50, "Critical",
+        FailureCount >= 20, "High", 
+        FailureCount >= 10, "Medium",
+        "Low"
+    ),
+    AttackPattern = case(
+        UniqueEndpoints >= 10, "Enumeration",
+        AuthError == "regional_access_denied", "Cross-Region Attack",
+        AuthError == "insufficient_permissions", "Privilege Escalation",
+        "Brute Force"
+    )
+| project 
+    TimeGenerated = LastFailure,
+    User = CsUsername,
+    AttackType = AuthError,
+    Pattern = AttackPattern,
+    Severity = SeverityScore,
+    Attempts = FailureCount,
+    Duration = LastFailure - FirstFailure,
+    AffectedEndpoints = UniqueEndpoints,
+    SourceIPs,
+    UserAgents
+
+// Query 1.2: Role-Based Access Control Violations
+// Monitors for users attempting actions outside their role permissions
+AppServiceConsoleLogs
+| where TimeGenerated > ago(24h)
+| where Level == "Error"
+| where ResultDescription contains "RBAC_VIOLATION"
+| extend 
+    UserId = extract(@"user_id:\s*([^,\s]+)", 1, ResultDescription),
+    UserRole = extract(@"user_role:\s*([^,\s]+)", 1, ResultDescription),
+    AttemptedAction = extract(@"attempted_action:\s*([^,\s]+)", 1, ResultDescription),
+    RequiredRole = extract(@"required_role:\s*([^,\s]+)", 1, ResultDescription),
+    RegionContext = extract(@"region:\s*([^,\s]+)", 1, ResultDescription)
+| where isnotempty(UserId) and isnotempty(UserRole)
+| summarize 
+    ViolationCount = count(),
+    UniqueActions = make_set(AttemptedAction),
+    Regions = make_set(RegionContext),
+    FirstViolation = min(TimeGenerated),
+    LastViolation = max(TimeGenerated)
+    by UserId, UserRole, RequiredRole
+| where ViolationCount >= 3  // 3+ violations in 24h
+| extend 
+    RiskLevel = case(
+        ViolationCount >= 20, "Critical",
+        ViolationCount >= 10, "High",
+        ViolationCount >= 5, "Medium",
+        "Low"
+    )
+| project
+    AlertTime = LastViolation,
+    UserIdentity = UserId,
+    CurrentRole = UserRole,
+    TargetRole = RequiredRole,
+    Violations = ViolationCount,
+    AttemptedActions = UniqueActions,
+    AffectedRegions = Regions,
+    RiskScore = RiskLevel,
+    ViolationWindow = LastViolation - FirstViolation
+
+// =============================================================================
+// 2. CROSS-REGION ACCESS ANOMALIES
+// =============================================================================
+
+// Query 2.1: Unusual Cross-Region Activity Detection
+// Identifies users accessing regions outside their normal patterns
+AppServiceHTTPLogs
+| where TimeGenerated > ago(7d)
+| where ScStatus == 200
+| extend 
+    UserId = extract(@"user_id=([^&\s]+)", 1, CsUriQuery),
+    RegionHeader = extract(@"X-Region-Context:\s*([^\s,]+)", 1, CsReferer),
+    TargetRegion = extract(@"region=([^&\s]+)", 1, CsUriQuery)
+| where isnotempty(UserId) and isnotempty(TargetRegion)
+| where TargetRegion in ("ph-ncr-manila", "ph-vis-cebu", "ph-min-davao")
+| summarize 
+    RegionSet = make_set(TargetRegion),
+    AccessCount = count(),
+    FirstAccess = min(TimeGenerated),
+    LastAccess = max(TimeGenerated),
+    SourceIPs = make_set(ClientIP)
+    by UserId
+| extend RegionCount = array_length(RegionSet)
+| where RegionCount >= 2  // User accessing multiple regions
+// Create baseline of normal behavior (30-day window)
+| join kind=leftouter (
+    AppServiceHTTPLogs
+    | where TimeGenerated between (ago(37d) .. ago(7d))  // Historical baseline
+    | extend 
+        UserId = extract(@"user_id=([^&\s]+)", 1, CsUriQuery),
+        TargetRegion = extract(@"region=([^&\s]+)", 1, CsUriQuery)
+    | where isnotempty(UserId) and isnotempty(TargetRegion)
+    | summarize BaselineRegions = make_set(TargetRegion) by UserId
+) on UserId
+| extend 
+    NewRegions = set_difference(RegionSet, BaselineRegions),
+    AnomalyScore = array_length(set_difference(RegionSet, BaselineRegions)) * 100 / array_length(RegionSet)
+| where array_length(NewRegions) > 0 or AnomalyScore > 50
+| project
+    DetectionTime = LastAccess,
+    UserIdentity = UserId,
+    CurrentRegions = RegionSet,
+    HistoricalRegions = BaselineRegions,
+    NewRegionAccess = NewRegions,
+    AnomalyPercentage = AnomalyScore,
+    TotalAccesses = AccessCount,
+    UniqueSourceIPs = array_length(SourceIPs),
+    Severity = case(
+        AnomalyScore >= 80, "High",
+        AnomalyScore >= 50, "Medium",
+        "Low"
+    )
+
+// Query 2.2: Emergency Override Abuse Detection
+// Monitors for inappropriate use of emergency access overrides
+AppServiceConsoleLogs
+| where TimeGenerated > ago(24h)
+| where Level in ("Warning", "Info")
+| where ResultDescription contains "EMERGENCY_OVERRIDE"
+| extend 
+    UserId = extract(@"user_id:\s*([^,\s]+)", 1, ResultDescription),
+    OverrideType = extract(@"override_type:\s*([^,\s]+)", 1, ResultDescription),
+    Justification = extract(@"justification:\s*([^,]+)", 1, ResultDescription),
+    IncidentId = extract(@"incident_id:\s*([^,\s]+)", 1, ResultDescription),
+    Duration = extract(@"duration_hours:\s*(\d+)", 1, ResultDescription),
+    ApprovalStatus = extract(@"approval_status:\s*([^,\s]+)", 1, ResultDescription)
+| where isnotempty(UserId)
+| summarize 
+    OverrideCount = count(),
+    OverrideTypes = make_set(OverrideType),
+    TotalDuration = sum(toint(Duration)),
+    IncidentIds = make_set(IncidentId),
+    Justifications = make_set(Justification),
+    FirstOverride = min(TimeGenerated),
+    LastOverride = max(TimeGenerated)
+    by UserId, ApprovalStatus
+| extend 
+    SuspiciousIndicators = array_length(
+        array_concat(
+            iff(OverrideCount >= 5, dynamic(["High frequency"]), dynamic([])),
+            iff(TotalDuration >= 24, dynamic(["Extended duration"]), dynamic([])),
+            iff(ApprovalStatus != "approved", dynamic(["Unapproved usage"]), dynamic([])),
+            iff(array_length(IncidentIds) != OverrideCount, dynamic(["Missing incidents"]), dynamic([]))
+        )
+    )
+| where SuspiciousIndicators > 0
+| project
+    AlertTime = LastOverride,
+    UserIdentity = UserId,
+    OverrideUsage = OverrideCount,
+    TotalHours = TotalDuration,
+    Status = ApprovalStatus,
+    Types = OverrideTypes,
+    RedFlags = SuspiciousIndicators,
+    LinkedIncidents = IncidentIds
+
+// =============================================================================
+// 3. PII ACCESS PATTERN MONITORING
+// =============================================================================
+
+// Query 3.1: Abnormal PII Access Detection
+// Identifies unusual patterns in PII unmasking activities
+AppServiceConsoleLogs
+| where TimeGenerated > ago(24h)
+| where Level == "Info"
+| where ResultDescription contains "PII_ACCESS"
+| extend 
+    UserId = extract(@"user_id:\s*([^,\s]+)", 1, ResultDescription),
+    DataSubject = extract(@"data_subject:\s*([^,\s]+)", 1, ResultDescription),
+    PIIFields = extract(@"fields:\s*\[([^\]]+)\]", 1, ResultDescription),
+    AccessReason = extract(@"justification:\s*([^,]+)", 1, ResultDescription),
+    MFAMethod = extract(@"mfa_method:\s*([^,\s]+)", 1, ResultDescription),
+    RegionId = extract(@"region:\s*([^,\s]+)", 1, ResultDescription)
+| where isnotempty(UserId) and isnotempty(DataSubject)
+| extend FieldCount = array_length(split(PIIFields, ","))
+// Calculate access velocity and volume
+| summarize 
+    AccessCount = count(),
+    UniqueSubjects = dcount(DataSubject),
+    TotalFields = sum(FieldCount),
+    AccessReasons = make_set(AccessReason),
+    MFAMethods = make_set(MFAMethod),
+    Regions = make_set(RegionId),
+    FirstAccess = min(TimeGenerated),
+    LastAccess = max(TimeGenerated)
+    by UserId
+| extend
+    AccessVelocity = AccessCount * 1.0 / (datetime_diff('hour', LastAccess, FirstAccess) + 1),
+    AvgFieldsPerAccess = TotalFields * 1.0 / AccessCount
+// Compare against historical baseline
+| join kind=leftouter (
+    AppServiceConsoleLogs
+    | where TimeGenerated between (ago(31d) .. ago(1d))
+    | where Level == "Info" and ResultDescription contains "PII_ACCESS"
+    | extend 
+        UserId = extract(@"user_id:\s*([^,\s]+)", 1, ResultDescription),
+        FieldCount = array_length(split(extract(@"fields:\s*\[([^\]]+)\]", 1, ResultDescription), ","))
+    | where isnotempty(UserId)
+    | summarize 
+        BaselineDailyAvg = count() / 30.0,
+        BaselineAvgFields = avg(FieldCount)
+        by UserId
+) on UserId
+| extend
+    AccessAnomalyRatio = AccessCount / (BaselineDailyAvg * 1 + 1),  // +1 to avoid division by zero
+    FieldAnomalyRatio = AvgFieldsPerAccess / (BaselineAvgFields + 1)
+| where AccessAnomalyRatio >= 3 or FieldAnomalyRatio >= 2 or AccessVelocity >= 10
+| project
+    DetectionTime = LastAccess,
+    UserIdentity = UserId,
+    DailyAccesses = AccessCount,
+    SubjectsAccessed = UniqueSubjects,
+    AccessesPerHour = AccessVelocity,
+    AverageFields = AvgFieldsPerAccess,
+    BaselineDeviation = AccessAnomalyRatio,
+    FieldDeviation = FieldAnomalyRatio,
+    AffectedRegions = Regions,
+    JustificationVariety = array_length(AccessReasons),
+    RiskScore = case(
+        AccessAnomalyRatio >= 10 or AccessVelocity >= 50, "Critical",
+        AccessAnomalyRatio >= 5 or AccessVelocity >= 20, "High",
+        AccessAnomalyRatio >= 3 or AccessVelocity >= 10, "Medium",
+        "Low"
+    )
+
+// Query 3.2: PII Export Activity Monitoring
+// Tracks data export activities and potential data exfiltration
+AppServiceHTTPLogs
+| where TimeGenerated > ago(24h)
+| where CsUriStem contains "/exports/"
+| where ScStatus in (200, 206)  // Successful downloads
+| extend 
+    UserId = extract(@"user_id=([^&\s]+)", 1, CsUriQuery),
+    ExportType = extract(@"/exports/([^/?]+)", 1, CsUriStem),
+    RecordCount = toint(extract(@"Content-Records:\s*(\d+)", 1, CsReferer)),
+    FileSize = toint(ScBytes)
+| where isnotempty(UserId) and isnotempty(ExportType)
+| summarize 
+    ExportCount = count(),
+    TotalRecords = sum(RecordCount),
+    TotalBytes = sum(FileSize),
+    ExportTypes = make_set(ExportType),
+    SourceIPs = make_set(ClientIP),
+    UserAgents = make_set(CsUserAgent),
+    FirstExport = min(TimeGenerated),
+    LastExport = max(TimeGenerated)
+    by UserId
+| extend
+    ExportVelocity = ExportCount * 1.0 / (datetime_diff('hour', LastExport, FirstExport) + 1),
+    MBExported = TotalBytes / (1024.0 * 1024.0)
+// Flag suspicious patterns
+| where 
+    ExportCount >= 10 or          // High volume
+    TotalRecords >= 10000 or      // Large datasets
+    MBExported >= 100 or          // Large file sizes
+    ExportVelocity >= 5           // High frequency
+| extend
+    SuspiciousPatterns = array_concat(
+        iff(ExportCount >= 20, dynamic(["High volume exports"]), dynamic([])),
+        iff(TotalRecords >= 50000, dynamic(["Massive dataset"]), dynamic([])),
+        iff(array_length(SourceIPs) >= 3, dynamic(["Multiple source IPs"]), dynamic([])),
+        iff(datetime_diff('hour', LastExport, FirstExport) <= 1 and ExportCount >= 5, dynamic(["Rapid succession"]), dynamic([]))
+    )
+| project
+    AlertTime = LastExport,
+    UserIdentity = UserId,
+    ExportsCount = ExportCount,
+    RecordsExported = TotalRecords,
+    DataVolumeMB = MBExported,
+    ExportRate = ExportVelocity,
+    DataTypes = ExportTypes,
+    IPAddresses = array_length(SourceIPs),
+    Indicators = SuspiciousPatterns,
+    ThreatLevel = case(
+        MBExported >= 1000 or TotalRecords >= 100000, "Critical",
+        MBExported >= 500 or TotalRecords >= 50000, "High",
+        MBExported >= 100 or TotalRecords >= 10000, "Medium",
+        "Low"
+    )
+
+// =============================================================================
+// 4. TOKEN SECURITY EVENTS
+// =============================================================================
+
+// Query 4.1: JWT Token Anomaly Detection
+// Identifies suspicious token usage patterns including replay attacks
+AppServiceConsoleLogs
+| where TimeGenerated > ago(1h)
+| where Level in ("Warning", "Error")
+| where ResultDescription contains "TOKEN_SECURITY"
+| extend 
+    TokenEvent = extract(@"event_type:\s*([^,\s]+)", 1, ResultDescription),
+    UserId = extract(@"user_id:\s*([^,\s]+)", 1, ResultDescription),
+    TokenHash = extract(@"token_hash:\s*([^,\s]+)", 1, ResultDescription),
+    SourceIP = extract(@"source_ip:\s*([^,\s]+)", 1, ResultDescription),
+    UserAgent = extract(@"user_agent:\s*([^,]+)", 1, ResultDescription),
+    RegionMismatch = extract(@"region_mismatch:\s*([^,\s]+)", 1, ResultDescription),
+    GeolocationAnomaly = extract(@"geo_anomaly:\s*([^,\s]+)", 1, ResultDescription)
+| where TokenEvent in ("token_replay", "impossible_travel", "concurrent_usage", "expired_token_usage")
+| summarize 
+    EventCount = count(),
+    EventTypes = make_set(TokenEvent),
+    UniqueIPs = make_set(SourceIP),
+    UserAgents = make_set(UserAgent),
+    FirstEvent = min(TimeGenerated),
+    LastEvent = max(TimeGenerated)
+    by UserId, TokenHash
+| extend
+    IPCount = array_length(UniqueIPs),
+    UACount = array_length(UserAgents),
+    EventWindow = datetime_diff('minute', LastEvent, FirstEvent)
+| where EventCount >= 3 or IPCount >= 2  // Multiple events or IPs
+| project
+    IncidentTime = LastEvent,
+    UserIdentity = UserId,
+    Token = substring(TokenHash, 0, 8),  // Truncated for security
+    SecurityEvents = EventTypes,
+    EventFrequency = EventCount,
+    SourceIPCount = IPCount,
+    UserAgentCount = UACount,
+    WindowMinutes = EventWindow,
+    ThreatIndicators = strcat_array(
+        array_concat(
+            iff(IPCount >= 3, dynamic(["Multiple IPs"]), dynamic([])),
+            iff(UACount >= 2, dynamic(["Multiple User Agents"]), dynamic([])),
+            iff(EventCount >= 10, dynamic(["High frequency"]), dynamic([])),
+            iff(EventWindow <= 5, dynamic(["Rapid succession"]), dynamic([]))
+        ), ", "
+    ),
+    SeverityLevel = case(
+        IPCount >= 5 or EventCount >= 20, "Critical",
+        IPCount >= 3 or EventCount >= 10, "High",
+        IPCount >= 2 or EventCount >= 5, "Medium",
+        "Low"
+    )
+
+// Query 4.2: Session Hijacking Detection
+// Monitors for signs of compromised user sessions
+AppServiceHTTPLogs
+| where TimeGenerated > ago(2h)
+| where ScStatus == 200
+| extend 
+    SessionId = extract(@"session_id=([^&\s;]+)", 1, CsCookie),
+    UserId = extract(@"user_id=([^&\s]+)", 1, CsUriQuery)
+| where isnotempty(SessionId) and isnotempty(UserId)
+| summarize 
+    RequestCount = count(),
+    UniqueIPs = make_set(ClientIP),
+    UniqueUserAgents = make_set(CsUserAgent),
+    Countries = make_set(extract(@"Country:\s*([^,\s]+)", 1, CsReferer)),
+    FirstSeen = min(TimeGenerated),
+    LastSeen = max(TimeGenerated)
+    by SessionId, UserId
+| extend
+    IPCount = array_length(UniqueIPs),
+    UACount = array_length(UniqueUserAgents),
+    CountryCount = array_length(Countries)
+// Detect impossible travel and concurrent sessions
+| where IPCount >= 2 or CountryCount >= 2
+| extend
+    MaxDistance = iff(CountryCount >= 2, 
+        case(
+            set_has_element(Countries, "Philippines") and array_length(set_difference(Countries, dynamic(["Philippines"]))) > 0, 10000,  // International
+            1000  // Regional
+        ), 0),
+    SessionDuration = datetime_diff('hour', LastSeen, FirstSeen)
+| where (MaxDistance >= 1000 and SessionDuration <= 2) or IPCount >= 3
+| project
+    AlertTime = LastSeen,
+    UserIdentity = UserId,
+    Session = substring(SessionId, 0, 12),  // Partial for security
+    RequestVolume = RequestCount,
+    SourceIPCount = IPCount,
+    UserAgentVariety = UACount,
+    LocationCount = CountryCount,
+    PossibleDistance = MaxDistance,
+    SessionHours = SessionDuration,
+    CompromiseIndicators = strcat_array(
+        array_concat(
+            iff(IPCount >= 5, dynamic(["Many IPs"]), dynamic([])),
+            iff(MaxDistance >= 10000, dynamic(["Impossible travel"]), dynamic([])),
+            iff(CountryCount >= 3, dynamic(["Multiple countries"]), dynamic([])),
+            iff(UACount >= 3, dynamic(["Multiple browsers"]), dynamic([]))
+        ), ", "
+    ),
+    RiskLevel = case(
+        MaxDistance >= 10000 or IPCount >= 5, "Critical",
+        MaxDistance >= 1000 or IPCount >= 3, "High",
+        "Medium"
+    )
+
+// =============================================================================
+// 5. PRIVILEGE ESCALATION ATTEMPTS
+// =============================================================================
+
+// Query 5.1: Role Escalation Detection
+// Identifies attempts to gain unauthorized elevated privileges
+AppServiceConsoleLogs
+| where TimeGenerated > ago(24h)
+| where Level == "Error"
+| where ResultDescription contains "PRIVILEGE_ESCALATION"
+| extend 
+    UserId = extract(@"user_id:\s*([^,\s]+)", 1, ResultDescription),
+    CurrentRole = extract(@"current_role:\s*([^,\s]+)", 1, ResultDescription),
+    AttemptedRole = extract(@"attempted_role:\s*([^,\s]+)", 1, ResultDescription),
+    EscalationMethod = extract(@"method:\s*([^,\s]+)", 1, ResultDescription),
+    TargetResource = extract(@"target_resource:\s*([^,\s]+)", 1, ResultDescription),
+    SourceIP = extract(@"source_ip:\s*([^,\s]+)", 1, ResultDescription)
+| where isnotempty(UserId) and isnotempty(CurrentRole) and isnotempty(AttemptedRole)
+// Define role levels for privilege analysis
+| extend 
+    CurrentLevel = case(
+        CurrentRole == "ground_ops", 10,
+        CurrentRole == "support", 25,
+        CurrentRole == "analyst", 25,
+        CurrentRole == "ops_manager", 30,
+        CurrentRole == "risk_investigator", 35,
+        CurrentRole == "regional_manager", 40,
+        CurrentRole == "compliance_officer", 60,
+        CurrentRole == "iam_admin", 80,
+        CurrentRole == "app_admin", 90,
+        0
+    ),
+    AttemptedLevel = case(
+        AttemptedRole == "ground_ops", 10,
+        AttemptedRole == "support", 25,
+        AttemptedRole == "analyst", 25,
+        AttemptedRole == "ops_manager", 30,
+        AttemptedRole == "risk_investigator", 35,
+        AttemptedRole == "regional_manager", 40,
+        AttemptedRole == "compliance_officer", 60,
+        AttemptedRole == "iam_admin", 80,
+        AttemptedRole == "app_admin", 90,
+        100
+    )
+| extend EscalationMagnitude = AttemptedLevel - CurrentLevel
+| where EscalationMagnitude > 0  // Only privilege escalations
+| summarize 
+    EscalationAttempts = count(),
+    Methods = make_set(EscalationMethod),
+    TargetRoles = make_set(AttemptedRole),
+    Resources = make_set(TargetResource),
+    MaxEscalation = max(EscalationMagnitude),
+    SourceIPs = make_set(SourceIP),
+    FirstAttempt = min(TimeGenerated),
+    LastAttempt = max(TimeGenerated)
+    by UserId, CurrentRole
+| extend
+    EscalationSeverity = case(
+        MaxEscalation >= 50, "Critical",  // Jumping to admin roles
+        MaxEscalation >= 30, "High",      // Significant role jump
+        MaxEscalation >= 15, "Medium",    // Moderate escalation
+        "Low"
+    )
+| project
+    AlertTime = LastAttempt,
+    UserIdentity = UserId,
+    UserRole = CurrentRole,
+    AttemptCount = EscalationAttempts,
+    TargetedRoles = TargetRoles,
+    EscalationMethods = Methods,
+    MaxPrivilegeJump = MaxEscalation,
+    TargetedResources = Resources,
+    AttackSources = array_length(SourceIPs),
+    Severity = EscalationSeverity,
+    AttackWindow = datetime_diff('hour', LastAttempt, FirstAttempt)
+
+// =============================================================================
+// 6. TEMPORAL ACCESS VIOLATIONS
+// =============================================================================
+
+// Query 6.1: After-Hours Access Monitoring
+// Detects access attempts outside of authorized time windows
+AppServiceHTTPLogs
+| where TimeGenerated > ago(7d)
+| where ScStatus == 200
+| extend 
+    Hour = datetime_part("hour", TimeGenerated),
+    DayOfWeek = dayofweek(TimeGenerated),
+    UserId = extract(@"user_id=([^&\s]+)", 1, CsUriQuery),
+    Role = extract(@"role=([^&\s]+)", 1, CsUriQuery),
+    Endpoint = CsUriStem
+| where isnotempty(UserId) and isnotempty(Role)
+// Define business hours (8 AM - 8 PM, Mon-Sat for Philippines operations)
+| extend 
+    IsBusinessHours = (DayOfWeek >= 1 and DayOfWeek <= 6 and Hour >= 8 and Hour <= 20),
+    IsWeekend = (DayOfWeek == 0 or DayOfWeek == 6),
+    IsNightTime = (Hour <= 5 or Hour >= 22)
+// Identify after-hours access patterns
+| where not(IsBusinessHours) or IsWeekend or IsNightTime
+| summarize 
+    OffHoursRequests = count(),
+    WeekendRequests = countif(IsWeekend),
+    NightRequests = countif(IsNightTime),
+    UniqueEndpoints = dcount(Endpoint),
+    EndpointList = make_set(Endpoint),
+    FirstAccess = min(TimeGenerated),
+    LastAccess = max(TimeGenerated),
+    HourlyDistribution = make_set(Hour)
+    by UserId, Role
+// Focus on unusual patterns
+| where OffHoursRequests >= 10 or NightRequests >= 5 or WeekendRequests >= 5
+// Compare with user's historical pattern
+| join kind=leftouter (
+    AppServiceHTTPLogs
+    | where TimeGenerated between (ago(30d) .. ago(7d))
+    | extend 
+        Hour = datetime_part("hour", TimeGenerated),
+        DayOfWeek = dayofweek(TimeGenerated),
+        UserId = extract(@"user_id=([^&\s]+)", 1, CsUriQuery)
+    | where isnotempty(UserId)
+    | extend IsBusinessHours = (DayOfWeek >= 1 and DayOfWeek <= 6 and Hour >= 8 and Hour <= 20)
+    | summarize 
+        BaselineOffHours = countif(not(IsBusinessHours)),
+        BaselineTotal = count()
+        by UserId
+    | extend BaselineOffHoursRate = BaselineOffHours * 100.0 / BaselineTotal
+) on UserId
+| extend 
+    CurrentOffHoursRate = OffHoursRequests * 100.0 / (OffHoursRequests + 1),  // Approximation
+    AnomalyRatio = CurrentOffHoursRate / (BaselineOffHoursRate + 1)
+| where AnomalyRatio >= 2 or BaselineOffHoursRate == 0  // 2x increase or new behavior
+| project
+    DetectionTime = LastAccess,
+    UserIdentity = UserId,
+    UserRole = Role,
+    OffHoursActivity = OffHoursRequests,
+    WeekendActivity = WeekendRequests,
+    NightActivity = NightRequests,
+    AccessedEndpoints = UniqueEndpoints,
+    ActivityHours = HourlyDistribution,
+    CurrentRate = CurrentOffHoursRate,
+    BaselineRate = BaselineOffHoursRate,
+    AnomalyFactor = AnomalyRatio,
+    RiskAssessment = case(
+        AnomalyRatio >= 10 or (BaselineOffHoursRate == 0 and OffHoursRequests >= 20), "Critical",
+        AnomalyRatio >= 5 or (BaselineOffHoursRate == 0 and OffHoursRequests >= 10), "High",
+        AnomalyRatio >= 3 or OffHoursRequests >= 25, "Medium",
+        "Low"
+    )
+
+// =============================================================================
+// 7. SYSTEM COMPROMISE INDICATORS
+// =============================================================================
+
+// Query 7.1: Multi-Vector Attack Detection
+// Correlates multiple security events to identify coordinated attacks
+let SecurityEvents = AppServiceConsoleLogs
+| where TimeGenerated > ago(2h)
+| where Level in ("Warning", "Error")
+| where ResultDescription has_any ("RBAC_VIOLATION", "TOKEN_SECURITY", "PII_ACCESS", "PRIVILEGE_ESCALATION")
+| extend 
+    EventType = case(
+        ResultDescription contains "RBAC_VIOLATION", "AuthZ_Violation",
+        ResultDescription contains "TOKEN_SECURITY", "Token_Attack",
+        ResultDescription contains "PII_ACCESS" and ResultDescription contains "ANOMALY", "PII_Abuse",
+        ResultDescription contains "PRIVILEGE_ESCALATION", "Privilege_Attack",
+        "Unknown"
+    ),
+    UserId = extract(@"user_id:\s*([^,\s]+)", 1, ResultDescription),
+    SourceIP = extract(@"source_ip:\s*([^,\s]+)", 1, ResultDescription);
+SecurityEvents
+| where isnotempty(UserId)
+| summarize 
+    TotalEvents = count(),
+    EventTypes = make_set(EventType),
+    UniqueIPs = make_set(SourceIP),
+    FirstEvent = min(TimeGenerated),
+    LastEvent = max(TimeGenerated)
+    by UserId
+| extend
+    EventVariety = array_length(EventTypes),
+    IPVariety = array_length(UniqueIPs),
+    AttackWindow = datetime_diff('minute', LastEvent, FirstEvent)
+// Identify coordinated attacks (multiple event types from multiple IPs)
+| where EventVariety >= 2 and (TotalEvents >= 10 or IPVariety >= 2)
+| extend
+    AttackComplexity = case(
+        EventVariety >= 4, "Sophisticated",
+        EventVariety >= 3, "Advanced", 
+        EventVariety >= 2, "Coordinated",
+        "Simple"
+    ),
+    ThreatScore = EventVariety * 10 + IPVariety * 5 + bin(TotalEvents / 5, 1) * 3
+| project
+    IncidentTime = LastEvent,
+    TargetUser = UserId,
+    AttackEvents = TotalEvents,
+    AttackTypes = EventTypes,
+    SourceIPCount = IPVariety,
+    ComplexityLevel = AttackComplexity,
+    AttackDuration = AttackWindow,
+    ThreatSeverity = case(
+        ThreatScore >= 50, "Critical",
+        ThreatScore >= 30, "High",
+        ThreatScore >= 20, "Medium",
+        "Low"
+    ),
+    RiskScore = ThreatScore
+
+// Query 7.2: Lateral Movement Detection
+// Identifies potential lateral movement within the Xpress network
+AppServiceHTTPLogs
+| where TimeGenerated > ago(6h)
+| where ScStatus == 200
+| extend 
+    UserId = extract(@"user_id=([^&\s]+)", 1, CsUriQuery),
+    SourceRegion = extract(@"source_region=([^&\s]+)", 1, CsUriQuery),
+    TargetRegion = extract(@"target_region=([^&\s]+)", 1, CsUriQuery),
+    ResourceType = extract(@"/api/v1/([^/]+)", 1, CsUriStem),
+    Action = case(
+        CsMethod == "GET", "Read",
+        CsMethod == "POST", "Create",
+        CsMethod == "PUT", "Update", 
+        CsMethod == "DELETE", "Delete",
+        "Other"
+    )
+| where isnotempty(UserId) and isnotempty(ResourceType)
+| where ResourceType in ("drivers", "passengers", "trips", "users", "reports")
+// Track cross-resource access patterns
+| summarize 
+    AccessCount = count(),
+    ResourceTypes = make_set(ResourceType),
+    Actions = make_set(Action),
+    Regions = make_set(SourceRegion),
+    IPAddresses = make_set(ClientIP),
+    FirstAccess = min(TimeGenerated),
+    LastAccess = max(TimeGenerated)
+    by UserId
+| extend
+    ResourceVariety = array_length(ResourceTypes),
+    ActionVariety = array_length(Actions),
+    RegionSpread = array_length(Regions),
+    IPSpread = array_length(IPAddresses)
+// Identify potential lateral movement (high variety, rapid access)
+| where ResourceVariety >= 3 and (RegionSpread >= 2 or IPSpread >= 2)
+| extend MovementWindow = datetime_diff('hour', LastAccess, FirstAccess)
+| where MovementWindow <= 2  // Rapid cross-resource access
+| project
+    DetectionTime = LastAccess,
+    UserIdentity = UserId,
+    ResourcesAccessed = ResourceVariety,
+    ActionsPerformed = ActionVariety,
+    RegionsInvolved = RegionSpread,
+    SourceIPs = IPSpread,
+    TotalRequests = AccessCount,
+    MovementSpeed = ResourceVariety * 1.0 / (MovementWindow + 0.1),
+    LateralMovementScore = ResourceVariety * 10 + RegionSpread * 15 + IPSpread * 8,
+    SeverityLevel = case(
+        LateralMovementScore >= 60, "Critical",
+        LateralMovementScore >= 40, "High",
+        LateralMovementScore >= 25, "Medium",
+        "Low"
+    ),
+    AccessedResources = ResourceTypes,
+    ActivityRegions = Regions

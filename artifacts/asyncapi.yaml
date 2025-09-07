@@ -1,0 +1,521 @@
+asyncapi: 2.6.0
+info: 
+  title: Xpress Event Bus
+  version: 1.0.0
+defaultContentType: application/json
+channels: 
+  events.SIGINT: 
+    subscribe: 
+      message: 
+        name: SIGINT
+        payload: 
+
+  events.SIGTERM: 
+    subscribe: 
+      message: 
+        name: SIGTERM
+        payload: 
+
+  events.acquire: 
+    subscribe: 
+      message: 
+        name: acquire
+        payload: 
+
+  events.activity: 
+    subscribe: 
+      message: 
+        name: activity
+        payload: 
+
+  events.alert_generated: 
+    subscribe: 
+      message: 
+        name: alert_generated
+        payload: 
+
+  events.alert_resolved: 
+    subscribe: 
+      message: 
+        name: alert_resolved
+        payload: 
+
+  events.analytics:updated: 
+    subscribe: 
+      message: 
+        name: analytics:updated
+        payload: 
+
+  events.authenticate: 
+    subscribe: 
+      message: 
+        name: authenticate
+        payload: 
+
+  events.authenticated: 
+    subscribe: 
+      message: 
+        name: authenticated
+        payload: 
+
+  events.auto_subscribed: 
+    subscribe: 
+      message: 
+        name: auto_subscribed
+        payload: 
+
+  events.close: 
+    subscribe: 
+      message: 
+        name: close
+        payload: 
+
+  events.compliance:check: 
+    subscribe: 
+      message: 
+        name: compliance:check
+        payload: 
+
+  events.connect: 
+    subscribe: 
+      message: 
+        name: connect
+        payload: 
+
+  events.connect_error: 
+    subscribe: 
+      message: 
+        name: connect_error
+        payload: 
+
+  events.connected: 
+    subscribe: 
+      message: 
+        name: connected
+        payload: 
+
+  events.connection: 
+    subscribe: 
+      message: 
+        name: connection
+        payload: 
+
+  events.demand:surge_deactivated: 
+    subscribe: 
+      message: 
+        name: demand:surge_deactivated
+        payload: 
+
+  events.demand:updated: 
+    subscribe: 
+      message: 
+        name: demand:updated
+        payload: 
+
+  events.diagnostic-alert: 
+    subscribe: 
+      message: 
+        name: diagnostic-alert
+        payload: 
+
+  events.disconnect: 
+    subscribe: 
+      message: 
+        name: disconnect
+        payload: 
+
+  events.driver:batch_locations: 
+    subscribe: 
+      message: 
+        name: driver:batch_locations
+        payload: 
+
+  events.driver:bulk_location_update: 
+    subscribe: 
+      message: 
+        name: driver:bulk_location_update
+        payload: 
+
+  events.driver:location_updated: 
+    subscribe: 
+      message: 
+        name: driver:location_updated
+        payload: 
+
+  events.driver:status_changed: 
+    subscribe: 
+      message: 
+        name: driver:status_changed
+        payload: 
+
+  events.emergency:acknowledged: 
+    subscribe: 
+      message: 
+        name: emergency:acknowledged
+        payload: 
+
+  events.emergency:alert: 
+    subscribe: 
+      message: 
+        name: emergency:alert
+        payload: 
+
+  events.emergency:alert_update: 
+    subscribe: 
+      message: 
+        name: emergency:alert_update
+        payload: 
+
+  events.emergency:confirmation: 
+    subscribe: 
+      message: 
+        name: emergency:confirmation
+        payload: 
+
+  events.emergency:critical_alert: 
+    subscribe: 
+      message: 
+        name: emergency:critical_alert
+        payload: 
+
+  events.emergency:critical_sos: 
+    subscribe: 
+      message: 
+        name: emergency:critical_sos
+        payload: 
+
+  events.emergency:escalation: 
+    subscribe: 
+      message: 
+        name: emergency:escalation
+        payload: 
+
+  events.emergency:response_update: 
+    subscribe: 
+      message: 
+        name: emergency:response_update
+        payload: 
+
+  events.emergency:sos_triggered: 
+    subscribe: 
+      message: 
+        name: emergency:sos_triggered
+        payload: 
+
+  events.emergency:trigger: 
+    subscribe: 
+      message: 
+        name: emergency:trigger
+        payload: 
+
+  events.emergency:triggered: 
+    subscribe: 
+      message: 
+        name: emergency:triggered
+        payload: 
+
+  events.emergency:user_notification: 
+    subscribe: 
+      message: 
+        name: emergency:user_notification
+        payload: 
+
+  events.error: 
+    subscribe: 
+      message: 
+        name: error
+        payload: 
+
+  events.eta:updated: 
+    subscribe: 
+      message: 
+        name: eta:updated
+        payload: 
+
+  events.fraud:alert: 
+    subscribe: 
+      message: 
+        name: fraud:alert
+        payload: 
+
+  events.geofence:event: 
+    subscribe: 
+      message: 
+        name: geofence:event
+        payload: 
+
+  events.geofence:events: 
+    subscribe: 
+      message: 
+        name: geofence:events
+        payload: 
+
+  events.gps_update: 
+    subscribe: 
+      message: 
+        name: gps_update
+        payload: 
+
+  events.incident:acknowledged: 
+    subscribe: 
+      message: 
+        name: incident:acknowledged
+        payload: 
+
+  events.incident:new_alert: 
+    subscribe: 
+      message: 
+        name: incident:new_alert
+        payload: 
+
+  events.incident:status_update: 
+    subscribe: 
+      message: 
+        name: incident:status_update
+        payload: 
+
+  events.kpi:updated: 
+    subscribe: 
+      message: 
+        name: kpi:updated
+        payload: 
+
+  events.location:update: 
+    subscribe: 
+      message: 
+        name: location:update
+        payload: 
+
+  events.message: 
+    subscribe: 
+      message: 
+        name: message
+        payload: 
+
+  events.metrics:emergency_response: 
+    subscribe: 
+      message: 
+        name: metrics:emergency_response
+        payload: 
+
+  events.metrics_collected: 
+    subscribe: 
+      message: 
+        name: metrics_collected
+        payload: 
+
+  events.ml:aggregations: 
+    subscribe: 
+      message: 
+        name: ml:aggregations
+        payload: 
+
+  events.ml:inference:new_batch: 
+    subscribe: 
+      message: 
+        name: ml:inference:new_batch
+        payload: 
+
+  events.mobile_background: 
+    subscribe: 
+      message: 
+        name: mobile_background
+        payload: 
+
+  events.mobile_foreground: 
+    subscribe: 
+      message: 
+        name: mobile_foreground
+        payload: 
+
+  events.ping: 
+    subscribe: 
+      message: 
+        name: ping
+        payload: 
+
+  events.pong: 
+    subscribe: 
+      message: 
+        name: pong
+        payload: 
+
+  events.push_notification: 
+    subscribe: 
+      message: 
+        name: push_notification
+        payload: 
+
+  events.realtime_update: 
+    subscribe: 
+      message: 
+        name: realtime_update
+        payload: 
+
+  events.release: 
+    subscribe: 
+      message: 
+        name: release
+        payload: 
+
+  events.remove: 
+    subscribe: 
+      message: 
+        name: remove
+        payload: 
+
+  events.request: 
+    subscribe: 
+      message: 
+        name: request
+        payload: 
+
+  events.safety:alert: 
+    subscribe: 
+      message: 
+        name: safety:alert
+        payload: 
+
+  events.safety:alert_update: 
+    subscribe: 
+      message: 
+        name: safety:alert_update
+        payload: 
+
+  events.safety:critical_alert: 
+    subscribe: 
+      message: 
+        name: safety:critical_alert
+        payload: 
+
+  events.safety:emergency_alert: 
+    subscribe: 
+      message: 
+        name: safety:emergency_alert
+        payload: 
+
+  events.sla:violation: 
+    subscribe: 
+      message: 
+        name: sla:violation
+        payload: 
+
+  events.sos:health_check: 
+    subscribe: 
+      message: 
+        name: sos:health_check
+        payload: 
+
+  events.sos:processing_failed: 
+    subscribe: 
+      message: 
+        name: sos:processing_failed
+        payload: 
+
+  events.sos:update: 
+    subscribe: 
+      message: 
+        name: sos:update
+        payload: 
+
+  events.subscribe: 
+    subscribe: 
+      message: 
+        name: subscribe
+        payload: 
+
+  events.subscribed: 
+    subscribe: 
+      message: 
+        name: subscribed
+        payload: 
+
+  events.subscription_error: 
+    subscribe: 
+      message: 
+        name: subscription_error
+        payload: 
+
+  events.subscription_updated: 
+    subscribe: 
+      message: 
+        name: subscription_updated
+        payload: 
+
+  events.surge:driver_notification: 
+    subscribe: 
+      message: 
+        name: surge:driver_notification
+        payload: 
+
+  events.surge:passenger_update: 
+    subscribe: 
+      message: 
+        name: surge:passenger_update
+        payload: 
+
+  events.system:alert: 
+    subscribe: 
+      message: 
+        name: system:alert
+        payload: 
+
+  events.system:announcement: 
+    subscribe: 
+      message: 
+        name: system:announcement
+        payload: 
+
+  events.system:health_check: 
+    subscribe: 
+      message: 
+        name: system:health_check
+        payload: 
+
+  events.system:metrics_updated: 
+    subscribe: 
+      message: 
+        name: system:metrics_updated
+        payload: 
+
+  events.telemetry-update: 
+    subscribe: 
+      message: 
+        name: telemetry-update
+        payload: 
+
+  events.traffic:updated: 
+    subscribe: 
+      message: 
+        name: traffic:updated
+        payload: 
+
+  events.uncaughtException: 
+    subscribe: 
+      message: 
+        name: uncaughtException
+        payload: 
+
+  events.unhandledRejection: 
+    subscribe: 
+      message: 
+        name: unhandledRejection
+        payload: 
+
+  events.unsubscribe: 
+    subscribe: 
+      message: 
+        name: unsubscribe
+        payload: 
+
+  events.unsubscribed: 
+    subscribe: 
+      message: 
+        name: unsubscribed
+        payload: 
+
+  events.update_frequency: 
+    subscribe: 
+      message: 
+        name: update_frequency
+        payload: 

@@ -1,0 +1,224 @@
+# RBAC Role Management - Production Alerts Configuration
+# Compatible with Prometheus AlertManager
+
+groups:
+  - name: rbac_security_alerts
+    rules:
+      # SEV-2: Baseline role change applied without approval
+      - alert: BaselineRoleChangeUnauthorized
+        expr: increase(security_audit_log{event_type="ROLE_UPDATED",role_name=~"ground_ops|support|executive|iam_admin",approval_status!="approved"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: sev2
+          component: rbac
+          team: security
+        annotations:
+          summary: "Baseline role {{ $labels.role_name }} changed without proper approval"
+          description: "CRITICAL: A baseline role ({{ $labels.role_name }}) was modified without going through the approval workflow. This should never happen in production."
+          runbook_url: "https://docs.company.com/runbooks/rbac-unauthorized-baseline-change"
+
+      # SEV-2: Pending change expires unapproved for high-privilege roles
+      - alert: HighPrivilegeChangeExpired
+        expr: count by (role_name) (rbac_role_pending_changes{status="expired",role_level >= 60}) > 0
+        for: 0m
+        labels:
+          severity: sev2
+          component: rbac
+          team: security
+        annotations:
+          summary: "High-privilege role change expired without approval"
+          description: "A pending change for high-privilege role {{ $labels.role_name }} has expired without approval. This may indicate approval workflow issues."
+          runbook_url: "https://docs.company.com/runbooks/rbac-approval-timeout"
+
+      # SEV-3: Spike in 403 due to ABAC misconfig
+      - alert: ABACDenialSpike
+        expr: rate(security_audit_log{event_type="ACCESS_DENIED",denial_reason=~".*region.*|.*pii.*|.*domain.*"}[10m]) > 0.1
+        for: 5m
+        labels:
+          severity: sev3
+          component: rbac
+          team: platform
+        annotations:
+          summary: "Unusual spike in ABAC access denials"
+          description: "Access denials due to ABAC constraints ({{ $labels.denial_reason }}) have increased to {{ $value }} per second over the last 10 minutes."
+          runbook_url: "https://docs.company.com/runbooks/rbac-abac-denials"
+
+      # SEV-3: Export endpoint performance degradation
+      - alert: RBACExportPerformanceDegraded
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{endpoint="/api/rbac/roles",query_params=~".*format=.*"}[10m])) > 2
+        for: 5m
+        labels:
+          severity: sev3
+          component: rbac
+          team: platform
+        annotations:
+          summary: "RBAC export performance degraded"
+          description: "P95 response time for RBAC export endpoints is {{ $value }}s, exceeding the 2s threshold."
+          runbook_url: "https://docs.company.com/runbooks/rbac-export-performance"
+
+      # SEV-3: Export endpoint error rate
+      - alert: RBACExportErrorRate
+        expr: rate(http_requests_total{endpoint="/api/rbac/roles",status=~"5.."}[5m]) / rate(http_requests_total{endpoint="/api/rbac/roles"}[5m]) > 0.001
+        for: 2m
+        labels:
+          severity: sev3
+          component: rbac
+          team: platform
+        annotations:
+          summary: "RBAC export error rate elevated"
+          description: "Error rate for RBAC exports is {{ $value | humanizePercentage }}, exceeding the 0.1% threshold."
+          runbook_url: "https://docs.company.com/runbooks/rbac-export-errors"
+
+  - name: rbac_operational_alerts
+    rules:
+      # Warning: Pending approvals queue building up
+      - alert: PendingApprovalsBacklog
+        expr: count(rbac_role_pending_changes{status="pending"}) > 10
+        for: 15m
+        labels:
+          severity: warning
+          component: rbac
+          team: operations
+        annotations:
+          summary: "RBAC approval queue building up"
+          description: "There are {{ $value }} pending role changes awaiting approval. Consider reviewing the approval workflow."
+
+      # Warning: Role churn rate high
+      - alert: HighRoleChurnRate
+        expr: increase(rbac_role_versions_total[7d]) > 50
+        for: 0m
+        labels:
+          severity: warning
+          component: rbac
+          team: operations
+        annotations:
+          summary: "High role modification rate detected"
+          description: "{{ $value }} role modifications in the last 7 days. Consider reviewing change management processes."
+
+      # Info: Baseline role access attempt
+      - alert: BaselineRoleAccessAttempt
+        expr: increase(security_audit_log{event_type="ROLE_ACCESS_ATTEMPT",role_name=~"ground_ops|support|executive|iam_admin"}[1h]) > 0
+        for: 0m
+        labels:
+          severity: info
+          component: rbac
+          team: security
+        annotations:
+          summary: "Access attempt to baseline role {{ $labels.role_name }}"
+          description: "Someone attempted to access/modify baseline role {{ $labels.role_name }}. This is logged for audit purposes."
+
+      # Warning: Version history growing large
+      - alert: RoleVersionHistoryLarge
+        expr: count by (role_id) (rbac_role_versions) > 100
+        for: 0m
+        labels:
+          severity: warning
+          component: rbac
+          team: platform
+        annotations:
+          summary: "Role version history is getting large"
+          description: "Role {{ $labels.role_id }} has over 100 versions. Consider pruning old versions."
+
+  - name: rbac_performance_alerts
+    rules:
+      # Warning: Role list API slow
+      - alert: RoleListAPISlowResponse
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{endpoint="/api/rbac/roles"}[10m])) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+          component: rbac
+          team: platform
+        annotations:
+          summary: "Role list API responding slowly"
+          description: "P95 response time for role list API is {{ $value }}s, exceeding 100ms threshold."
+
+      # Warning: Database connection pool exhaustion
+      - alert: RBACDatabaseConnectionsHigh
+        expr: postgresql_connections_active{database="ops_tower"} / postgresql_connections_max{database="ops_tower"} > 0.8
+        for: 2m
+        labels:
+          severity: warning
+          component: rbac
+          team: platform
+        annotations:
+          summary: "RBAC database connections approaching limit"
+          description: "Database connection utilization is {{ $value | humanizePercentage }} of maximum."
+
+  - name: rbac_business_logic_alerts
+    rules:
+      # Critical: Role without permissions
+      - alert: RoleWithoutPermissions
+        expr: count by (role_name) (rbac_roles{permissions_count=0}) > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: rbac
+          team: security
+        annotations:
+          summary: "Role {{ $labels.role_name }} has no permissions assigned"
+          description: "Role {{ $labels.role_name }} exists but has no permissions. This may indicate a configuration error."
+
+      # Warning: User without roles
+      - alert: ActiveUserWithoutRoles
+        expr: count by (user_id) (users{active="true"}) - count by (user_id) (user_roles) > 0
+        for: 10m
+        labels:
+          severity: warning
+          component: rbac
+          team: operations
+        annotations:
+          summary: "Active user without any roles assigned"
+          description: "User {{ $labels.user_id }} is active but has no roles assigned."
+
+      # Info: New role created
+      - alert: NewRoleCreated
+        expr: increase(rbac_roles_total[1h]) > 0
+        for: 0m
+        labels:
+          severity: info
+          component: rbac
+          team: operations
+        annotations:
+          summary: "New RBAC role created"
+          description: "A new role has been created in the system."
+
+# Notification routing (example configuration)
+route:
+  group_by: ['alertname', 'severity']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 1h
+  receiver: 'rbac-alerts'
+  routes:
+  - match:
+      severity: sev2
+    receiver: 'rbac-critical'
+  - match:
+      severity: sev3
+    receiver: 'rbac-warning'
+
+receivers:
+- name: 'rbac-alerts'
+  slack_configs:
+  - api_url: 'YOUR_SLACK_WEBHOOK_URL'
+    channel: '#rbac-alerts'
+    title: 'RBAC Alert'
+    text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+
+- name: 'rbac-critical'
+  pagerduty_configs:
+  - service_key: 'YOUR_PAGERDUTY_SERVICE_KEY'
+    description: 'Critical RBAC Security Alert'
+  slack_configs:
+  - api_url: 'YOUR_SLACK_WEBHOOK_URL'
+    channel: '#security-critical'
+    title: '🚨 CRITICAL RBAC ALERT'
+    text: '{{ range .Alerts }}{{ .Annotations.summary }}\n{{ .Annotations.description }}{{ end }}'
+
+- name: 'rbac-warning'
+  slack_configs:
+  - api_url: 'YOUR_SLACK_WEBHOOK_URL'
+    channel: '#rbac-warnings'
+    title: '⚠️ RBAC Warning'
+    text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'

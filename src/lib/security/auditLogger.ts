@@ -1,9 +1,17 @@
 // Security Audit Logging System
 // Comprehensive security event logging for compliance and monitoring
+// Note: This is a server-side only module
 
-import fs from 'fs/promises';
-import path from 'path';
-import crypto from 'crypto';
+let fs: any = null;
+let path: any = null;
+let crypto: any = null;
+
+// Only import Node.js modules on server side
+if (typeof window === 'undefined') {
+  fs = require('fs/promises');
+  path = require('path');
+  crypto = require('crypto');
+}
 
 // Audit event types
 export enum AuditEventType {
@@ -60,12 +68,31 @@ class AuditLogger {
   private flushTimer?: NodeJS.Timeout;
 
   constructor() {
-    this.logPath = path.join(process.cwd(), 'logs', 'security-audit.log');
-    this.startFlushTimer();
+    // Only initialize on server side
+    if (typeof window === 'undefined' && path) {
+      this.logPath = path.join(process.cwd(), 'logs', 'security-audit.log');
+      this.startFlushTimer();
+    } else {
+      // Client-side fallback - no file logging
+      this.logPath = '';
+    }
   }
 
   private generateEventId(): string {
-    return crypto.randomBytes(16).toString('hex');
+    if (crypto) {
+      return crypto.randomBytes(16).toString('hex');
+    }
+    // Client-side fallback using crypto.getRandomValues
+    const array = new Uint8Array(16);
+    if (typeof window !== 'undefined' && window.crypto) {
+      window.crypto.getRandomValues(array);
+    } else {
+      // Fallback for environments without crypto
+      for (let i = 0; i < array.length; i++) {
+        array[i] = Math.floor(Math.random() * 256);
+      }
+    }
+    return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
   }
 
   private startFlushTimer(): void {
@@ -77,16 +104,32 @@ class AuditLogger {
   private async flushLogs(): Promise<void> {
     if (this.logQueue.length === 0) return;
 
+    // Only perform file operations on server side
+    if (typeof window !== 'undefined') {
+      // Client-side: just console log and clear queue
+      this.logQueue.forEach(event => {
+        if (event.securityLevel === SecurityLevel.CRITICAL) {
+          console.warn('🚨 CRITICAL SECURITY EVENT:', event);
+        } else {
+          console.log('📋 AUDIT LOG:', event);
+        }
+      });
+      this.logQueue = [];
+      return;
+    }
+
     try {
       const logsToFlush = [...this.logQueue];
       this.logQueue = [];
 
       // Ensure log directory exists
-      await fs.mkdir(path.dirname(this.logPath), { recursive: true });
+      if (fs && path && this.logPath) {
+        await fs.mkdir(path.dirname(this.logPath), { recursive: true });
 
-      // Append logs to file
-      const logEntries = logsToFlush.map(event => JSON.stringify(event)).join('\n') + '\n';
-      await fs.appendFile(this.logPath, logEntries);
+        // Append logs to file
+        const logEntries = logsToFlush.map(event => JSON.stringify(event)).join('\n') + '\n';
+        await fs.appendFile(this.logPath, logEntries);
+      }
 
       // Send critical events to external monitoring
       const criticalEvents = logsToFlush.filter(e => e.securityLevel === SecurityLevel.CRITICAL);
@@ -96,7 +139,8 @@ class AuditLogger {
     } catch (error) {
       console.error('Failed to flush audit logs:', error);
       // Re-queue failed logs (up to max size)
-      this.logQueue = [...this.logQueue.slice(-(this.maxQueueSize - logsToFlush.length)), ...logsToFlush];
+      const logsToFlush = this.logQueue.slice(-(this.maxQueueSize - this.logQueue.length));
+      this.logQueue = [...this.logQueue, ...logsToFlush];
     }
   }
 

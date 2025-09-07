@@ -36,6 +36,7 @@ import PerformanceTab from '@/components/features/PerformanceTab';
 import DemandTab from '@/components/features/DemandTab';
 import SOSTab from '@/components/features/SOSTab';
 import FraudDashboard from '@/components/features/FraudDashboard';
+import VehicleMetricsCard from '@/components/dashboard/VehicleMetricsCard';
 import { useServiceType } from '@/contexts/ServiceTypeContext';
 import { useAnalytics } from '@/hooks/useAnalytics';
 
@@ -837,6 +838,23 @@ const DashboardPage = () => {
                 icon={CheckCircle}
               />
             </div>
+
+            {/* Vehicle Fleet Overview Integration */}
+            <VehicleMetricsCard
+              metrics={{
+                totalVehicles: 142,
+                activeVehicles: getCurrentData('activeDrivers').available,
+                vehiclesInService: getCurrentData('activeRides').count,
+                vehiclesInMaintenance: 8,
+                overdueMaintenance: 3,
+                activeAlerts: 5,
+                avgUtilization: 78.3,
+                fuelEfficiencyTrend: 12.4,
+                complianceScore: 96.2,
+                totalRevenue30d: getCurrentData('revenue').amount
+              }}
+              loading={analyticsLoading}
+            />
 
             {/* Combined Service Performance Overview */}
             <Card className="mb-6">

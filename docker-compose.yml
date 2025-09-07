@@ -1,6 +1,44 @@
 version: '3.8'
 
 services:
+  postgres:
+    image: postgis/postgis:15-3.3
+    container_name: xpress-ops-postgres
+    environment:
+      POSTGRES_DB: xpress_ops_tower
+      POSTGRES_USER: ops_admin
+      POSTGRES_PASSWORD: ops_secure_2024
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ops_admin -d xpress_ops_tower"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - xpress-network
+
+  # Optional: PgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: xpress-ops-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@xpress.local
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "8080:80"
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    networks:
+      - xpress-network
+
   xpress-ops-tower:
     build: .
     ports:
@@ -52,6 +90,7 @@ services:
       - prometheus
 
 volumes:
+  postgres_data:
   grafana-storage:
 
 networks:

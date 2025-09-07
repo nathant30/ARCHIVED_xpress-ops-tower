@@ -15,6 +15,9 @@ export * from './maps';
 // Ridesharing platform types (NEW - Priority types for professional ridesharing operations)
 export * from './ridesharing';
 
+// Operators Management types (NEW - Comprehensive operator management system)
+export * from './operators';
+
 // XPRESS Design System types (re-exported)
 export type { 
   XpressComponent, 

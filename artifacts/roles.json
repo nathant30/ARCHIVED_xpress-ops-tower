@@ -1,0 +1,22 @@
+{
+  "ground_ops": [
+    "rides.view",
+    "fraud.review",
+    "query_curated_views"
+  ],
+  "support": [
+    "rides.view",
+    "users.manage"
+  ],
+  "executive": [
+    "rides.view",
+    "pricing.configure",
+    "compliance.view",
+    "view_ops_kpis_masked"
+  ],
+  "iam_admin": [
+    "users.manage",
+    "operators.manage",
+    "compliance.edit"
+  ]
+}

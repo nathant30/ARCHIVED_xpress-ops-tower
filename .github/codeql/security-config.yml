@@ -1,0 +1,54 @@
+# CodeQL Security Configuration for Xpress Ops Tower
+name: "Xpress Ops Security Analysis"
+
+# Disable the default queries to focus on security
+disable-default-queries: false
+
+# Query packs for comprehensive security analysis
+queries:
+  - name: security-extended
+    uses: security-extended
+  - name: security-and-quality
+    uses: security-and-quality
+
+# Custom query suites for rideshare/emergency systems
+query-filters:
+  - exclude:
+      id: js/unused-local-variable
+  - include:
+      tags:
+        - security
+        - external/cwe
+
+# Path filters for focused analysis
+paths:
+  - "src/**"
+  - "scripts/**"
+  - "config/**"
+  - "middleware/**"
+
+paths-ignore:
+  - "node_modules/**"
+  - "__tests__/**/*.mock.js"
+  - "**/*.test.js"
+  - "**/*.spec.js"
+  - "docs/**"
+
+# Additional security-focused configuration
+external-repository-token: ${{ secrets.GITHUB_TOKEN }}
+
+# Database configuration
+database:
+  # Use the default database
+  finalize-database: true
+  
+  # Custom build commands if needed
+  build-command: "npm run build"
+
+# Analysis configuration
+threads: 0  # Use all available threads
+ram: 6144   # 6GB RAM limit
+
+# Report configuration
+sarif-category: "security-analysis"
+sarif-add-snippets: true

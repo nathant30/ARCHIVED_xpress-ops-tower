@@ -1,0 +1,24 @@
+name: API Drift Guard
+on:
+  pull_request:
+    branches: [ "**" ]
+  push:
+    branches: [ main, develop ]
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run Drift Check
+        run: |
+          npm ci --ignore-scripts || true
+          node ./scripts/drift-check.mjs || (echo "::error::API drift detected. See audit/*.txt"; exit 1)
+      - name: Upload audit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-drift-audit
+          path: audit/*.txt

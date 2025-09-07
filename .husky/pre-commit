@@ -1,6 +1,4 @@
 #!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
-
 echo "🔍 Running pre-commit checks..."
 
 # Run lint-staged for staged files
@@ -9,5 +7,13 @@ npx lint-staged
 # Run XPRESS compliance check
 echo "🎨 Checking XPRESS Design System compliance..."
 npm run xpress:check
+
+# Run API drift detection
+echo "📊 Checking API documentation sync..."
+npm run drift:check
+
+# Run quick unit tests on changed files only
+echo "🧪 Running unit tests..."
+npm run test:unit -- --passWithNoTests --findRelatedTests
 
 echo "✅ Pre-commit checks completed!"

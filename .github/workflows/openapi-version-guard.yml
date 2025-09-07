@@ -1,0 +1,40 @@
+name: OpenAPI Version Guard
+on:
+  pull_request:
+    paths:
+      - 'docs/api/openapi.json'
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+      - name: Compare spec vs base
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          cur=docs/api/openapi.json
+          old=.openapi.base.json
+          git show "$BASE:$cur" > "$old" || echo '{}' > "$old"
+
+          old_ver=$(jq -r '.info.version // "0.0.0"' "$old")
+          new_ver=$(jq -r '.info.version // "0.0.0"' "$cur")
+          paths_changed=$(jq -c '.paths' "$old" | sha1sum | awk '{print $1}')
+          paths_now=$(jq -c '.paths' "$cur" | sha1sum | awk '{print $1}')
+
+          echo "Old version: $old_ver"
+          echo "New version: $new_ver"
+
+          if [ "$paths_changed" != "$paths_now" ]; then
+            echo "Paths changed."
+            if [ "$old_ver" = "$new_ver" ]; then
+              echo "::error::OpenAPI paths changed but info.version was not bumped."
+              exit 1
+            fi
+          else
+            echo "Paths unchanged."
+          fi
+          echo "Version guard passed."

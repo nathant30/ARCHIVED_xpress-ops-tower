@@ -40,11 +40,13 @@
     "audit:performance": "npm run test:load && npm run monitoring:performance",
     "perf:lighthouse": "lhci autorun",
     "perf:lighthouse:ci": "lhci autorun --upload.target=temporary-public-storage",
-    "perf:lighthouse:dev": "lighthouse http://localhost:4000 --chrome-flags='--headless --no-sandbox' --output=html --output-path=./lighthouse-report.html",
+    "perf:lighthouse:dev": "node scripts/run-lighthouse-tests.js",
     "drift:check": "node ./scripts/drift-check.mjs",
     "drift:fix": "npm run drift:check && npm run spec:seed",
     "prepare": "husky",
-    "spec:seed": "node ./scripts/spec-seed.mjs"
+    "spec:seed": "node ./scripts/spec-seed.mjs",
+    "spec:stubify": "node ./scripts/openapi-stubify.mjs",
+    "docs:bundle": "redoc-cli bundle docs/api/openapi.json -o docs/api/index.html"
   },
   "dependencies": {
     "@googlemaps/google-maps-services-js": "^3.4.2",
@@ -130,6 +132,7 @@
     "jest-environment-jsdom": "^29.7.0",
     "lighthouse": "^12.8.2",
     "lint-staged": "^15.2.7",
+    "node-fetch": "^3.3.2",
     "playwright": "^1.55.0",
     "postcss": "^8.4.40",
     "prettier": "^3.3.3",

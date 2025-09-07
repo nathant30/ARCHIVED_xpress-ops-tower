@@ -91,8 +91,18 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
           }
-        }
+        },
+        "operationId": "get_Drivers"
       }
     },
     "/api/drivers/{id}": {
@@ -132,6 +142,12 @@
                     "format": "email"
                   }
                 }
+              },
+              "example": {
+                "ok": true,
+                "data": {
+                  "note": "replace with real request shape"
+                }
               }
             }
           }
@@ -147,13 +163,20 @@
               }
             }
           },
-          "404": {
-            "description": "Driver not found"
-          },
           "400": {
             "description": "Invalid input"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Driver not found"
           }
-        }
+        },
+        "operationId": "patch_Drivers"
       }
     },
     "/api/regions/{id}/assign-rm": {
@@ -192,6 +215,12 @@
                     "description": "Assignment start date"
                   }
                 }
+              },
+              "example": {
+                "ok": true,
+                "data": {
+                  "note": "replace with real request shape"
+                }
               }
             }
           }
@@ -229,8 +258,28 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
           }
-        }
+        },
+        "operationId": "post_RegionsAssignRm"
       }
     },
     "/api/rides/request": {
@@ -290,11 +339,27 @@
                     "description": "Optional scheduled pickup time"
                   }
                 }
+              },
+              "example": {
+                "ok": true,
+                "data": {
+                  "note": "replace with real request shape"
+                }
               }
             }
           }
         },
         "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericObject"
+                }
+              }
+            }
+          },
           "201": {
             "description": "Ride request created successfully",
             "content": {
@@ -321,8 +386,28 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
           }
-        }
+        },
+        "operationId": "post_RidesRequest"
       }
     }
   },
@@ -390,6 +475,126 @@
             "type": "integer"
           }
         }
+      },
+      "GenericObject": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "StandardError": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": ["message"]
+      },
+      "DriversGETRequest": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": ["ok"]
+      },
+      "DriversGETResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": ["ok"]
+      },
+      "DriversPATCHRequest": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": ["ok"]
+      },
+      "DriversPATCHResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": ["ok"]
+      },
+      "RegionsAssignRmPOSTRequest": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": ["ok"]
+      },
+      "RegionsAssignRmPOSTResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": ["ok"]
+      },
+      "RidesRequestPOSTRequest": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": ["ok"]
+      },
+      "RidesRequestPOSTResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": ["ok"]
       }
     },
     "securitySchemes": {

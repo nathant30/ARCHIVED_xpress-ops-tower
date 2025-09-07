@@ -2,13 +2,13 @@ name: AuthZ Regression Gate
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
     branches: [main, develop]
     paths:
       - 'src/lib/auth/**'
       - 'config/allowed-actions.json'
       - '__tests__/authz-comprehensive/**'
       - 'src/types/rbac-abac.ts'
-
   push:
     branches: [main]
     paths:
@@ -16,160 +16,159 @@ on:
       - 'config/allowed-actions.json'
 
 jobs:
+  # Marks workflow as success when PR is docs-only
+  docs_only_pass:
+    if: contains(github.event.pull_request.labels.*.name, 'docs-only')
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "docs-only PR → skipping AuthZ suite"
+
   authz-critical-tests:
+    # Run on push OR on PRs that are NOT docs-only
+    if: ${{ github.event_name == 'push' || !contains(github.event.pull_request.labels.*.name, 'docs-only') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    
     strategy:
       matrix:
         node-version: [18.x, 20.x]
-        
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
-        cache: 'npm'
-        
-    - name: Install dependencies
-      run: |
-        npm ci
-        npm install -g newman
-        
-    - name: Setup test environment
-      run: |
-        mkdir -p /tmp
-        echo "Setting up AuthZ test environment..."
-        
-    - name: Run AuthZ Regression Gate
-      id: authz_gate
-      run: |
-        echo "🔒 Running Critical Authorization Tests"
-        ./scripts/ci-authz-gate.sh
-      env:
-        CI: true
-        NODE_ENV: test
-        
-    - name: Upload test artifacts on failure
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        name: authz-test-failures-${{ matrix.node-version }}
-        path: |
-          /tmp/ci-newman.json
-          /tmp/ci-api-server.log
-          /tmp/authz-gate.log
-        retention-days: 7
-        
-    - name: Comment PR with results
-      if: github.event_name == 'pull_request'
-      uses: actions/github-script@v7
-      with:
-        script: |
-          const fs = require('fs');
-          let comment = '## 🔒 AuthZ Regression Gate Results\n\n';
-          
-          if (process.env.GITHUB_JOB_STATUS === 'success') {
-            comment += '✅ **All critical authorization tests passed**\n';
-            comment += '- SQL RLS/DDM: 100% pass rate\n';
-            comment += '- RBAC Permission Matrix: All validations passing\n';
-            comment += '- MFA Enforcement: All flows validated\n';
-            comment += '- Cross-Region Override: Boundary checks passing\n';
-            comment += '- API Integration: Critical endpoints validated\n\n';
-            comment += '🎉 **No authorization regressions detected - safe to merge**';
-          } else {
-            comment += '❌ **Authorization regression detected - BLOCKING MERGE**\n\n';
-            comment += '⚠️ One or more critical authorization tests failed. ';
-            comment += 'Please review the test results and fix authorization issues before merging.\n\n';
-            comment += '**Common Issues:**\n';
-            comment += '- Policy bundle hash mismatch\n';  
-            comment += '- MFA session TTL violations\n';
-            comment += '- Cross-region override logic errors\n';
-            comment += '- SQL RLS/DDM policy corruption\n';
-            comment += '- Permission matrix validation failures\n\n';
-            comment += '🔍 Check the workflow logs for detailed failure analysis.';
-          }
-          
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: comment
-          });
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm install -g newman
+
+      - name: Setup test environment
+        run: |
+          mkdir -p /tmp
+          echo "Setting up AuthZ test environment..."
+
+      - name: Run AuthZ Regression Gate
+        id: authz_gate
         env:
-          GITHUB_JOB_STATUS: ${{ job.status }}
+          CI: true
+          NODE_ENV: test
+        run: |
+          echo "🔒 Running Critical Authorization Tests"
+          ./scripts/ci-authz-gate.sh
+
+      - name: Upload test artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: authz-test-failures-${{ matrix.node-version }}
+          path: |
+            /tmp/ci-newman.json
+            /tmp/ci-api-server.log
+            /tmp/authz-gate.log
+          retention-days: 7
+
+      - name: Comment PR with results
+        if: ${{ github.event_name == 'pull_request' && always() }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const outcome = '${{ job.status }}';
+            let comment = '## 🔒 AuthZ Regression Gate Results\n\n';
+            if (outcome === 'success') {
+              comment += '✅ **All critical authorization tests passed**\n';
+              comment += '- SQL RLS/DDM: 100% pass rate\n';
+              comment += '- RBAC Permission Matrix: All validations passing\n';
+              comment += '- MFA Enforcement: All flows validated\n';
+              comment += '- Cross-Region Override: Boundary checks passing\n';
+              comment += '- API Integration: Critical endpoints validated\n\n';
+              comment += '🎉 **No authorization regressions detected - safe to merge**';
+            } else {
+              comment += '❌ **Authorization regression detected - BLOCKING MERGE**\n\n';
+              comment += '⚠️ One or more critical authorization tests failed.\n\n';
+              comment += '**Common Issues:**\n';
+              comment += '- Policy bundle hash mismatch\n';
+              comment += '- MFA session TTL violations\n';
+              comment += '- Cross-region override logic errors\n';
+              comment += '- SQL RLS/DDM policy corruption\n';
+              comment += '- Permission matrix validation failures\n\n';
+              comment += '🔍 Check the workflow logs for detailed failure analysis.';
+            }
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
 
   policy-bundle-validation:
+    if: ${{ github.event_name == 'push' || !contains(github.event.pull_request.labels.*.name, 'docs-only') }}
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20.x'
-        cache: 'npm'
-        
-    - name: Install dependencies
-      run: npm ci
-      
-    - name: Validate Policy Bundle Integrity
-      run: |
-        echo "🔍 Validating policy bundle integrity..."
-        node -e "
-        const { createPolicyBundle, validatePolicyBundle } = require('./src/lib/auth/policy-bundle.ts');
-        const bundle = createPolicyBundle();
-        const validation = validatePolicyBundle(bundle);
-        
-        console.log('Policy Bundle:', bundle.version, bundle.hash);
-        console.log('Validation:', validation);
-        
-        if (!validation.valid) {
-          console.error('❌ Policy bundle validation failed:', validation.errors);
-          process.exit(1);
-        }
-        
-        console.log('✅ Policy bundle is valid and ready for production');
-        "
-        
-    - name: Check for Breaking Changes
-      run: |
-        echo "🔄 Checking for breaking policy changes..."
-        # Compare with main branch policy bundle
-        git fetch origin main
-        if git diff --name-only origin/main..HEAD | grep -q "config/allowed-actions.json"; then
-          echo "⚠️ Policy configuration changes detected"
-          echo "Ensure version bump and compatibility testing"
-        else
-          echo "✅ No breaking policy changes detected"
-        fi
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate Policy Bundle Integrity
+        run: |
+          echo "🔍 Validating policy bundle integrity..."
+          node -e "
+          const { createPolicyBundle, validatePolicyBundle } = require('./src/lib/auth/policy-bundle.ts');
+          const bundle = createPolicyBundle();
+          const validation = validatePolicyBundle(bundle);
+          console.log('Policy Bundle:', bundle.version, bundle.hash);
+          console.log('Validation:', validation);
+          if (!validation.valid) {
+            console.error('❌ Policy bundle validation failed:', validation.errors);
+            process.exit(1);
+          }
+          console.log('✅ Policy bundle is valid and ready for production');
+          "
+
+      - name: Check for Breaking Changes
+        run: |
+          echo "🔄 Checking for breaking policy changes..."
+          git fetch origin main
+          if git diff --name-only origin/main..HEAD | grep -q "config/allowed-actions.json"; then
+            echo "⚠️ Policy configuration changes detected"
+            echo "Ensure version bump and compatibility testing"
+          else
+            echo "✅ No breaking policy changes detected"
+          fi
 
   security-scan:
+    if: ${{ github.event_name == 'push' || !contains(github.event.pull_request.labels.*.name, 'docs-only') }}
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
     steps:
-    - name: Checkout code  
-      uses: actions/checkout@v4
-      
-    - name: Run Security Scan on Auth Code
-      uses: github/codeql-action/analyze@v3
-      with:
-        languages: typescript
-        queries: security-and-quality
-        paths: |
-          src/lib/auth/
-          config/allowed-actions.json
-          
-    - name: Check for Hardcoded Secrets
-      run: |
-        echo "🔍 Scanning for hardcoded secrets in auth code..."
-        if grep -r -i -E "(password|secret|key|token).*=.*['\"][^'\"]{8,}" src/lib/auth/; then
-          echo "❌ Potential hardcoded secrets detected"
-          exit 1
-        else
-          echo "✅ No hardcoded secrets detected"
-        fi
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Security Scan on Auth Code
+        uses: github/codeql-action/analyze@v3
+        with:
+          languages: typescript
+          queries: security-and-quality
+          paths: |
+            src/lib/auth/
+            config/allowed-actions.json
+
+      - name: Check for Hardcoded Secrets
+        run: |
+          echo "🔍 Scanning for hardcoded secrets in auth code..."
+          if grep -r -i -E "(password|secret|key|token).*=.*['\"][^'\"]{8,}" src/lib/auth/; then
+            echo "❌ Potential hardcoded secrets detected"
+            exit 1
+          else
+            echo "✅ No hardcoded secrets detected"
+          fi

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useRBAC, PermissionButton } from '@/hooks/useRBAC';
 import { 
   Car, Clock, DollarSign, CheckCircle, XCircle, AlertTriangle, Users, MapPin, 
   Filter, Search, Calendar, MoreHorizontal, ArrowUpRight, ArrowDownRight, 
@@ -9,7 +10,7 @@ import {
   CreditCard, AlertCircle, Eye, Edit, Ban, UserPlus, Zap, PlayCircle,
   PauseCircle, SkipForward, Loader, TrendingUp, Navigation2, Truck, User,
   History, Shield, Settings, Gift, TrendingDown, Percent, Flag, Download, Copy, RotateCcw, List,
-  ChevronLeft
+  ChevronLeft, Brain, BarChart3, Target, Database
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -128,6 +129,46 @@ interface FareBreakdown {
   };
 }
 
+interface TripTimelineEvent {
+  id: string;
+  status: 'requested' | 'assigning' | 'assigned' | 'enroute_pickup' | 'arrived_pickup' | 'passenger_pickup' | 'enroute_destination' | 'arrived_destination' | 'completed' | 'cancelled';
+  timestamp: Date;
+  duration?: number; // milliseconds since previous event
+  description: string;
+  location?: [number, number];
+  metadata?: Record<string, any>;
+}
+
+interface DriverAssignmentAttempt {
+  id: string;
+  driverId: string;
+  driverName: string;
+  offeredAt: Date;
+  status: 'offered' | 'accepted' | 'declined' | 'timeout' | 'cancelled';
+  responseAt?: Date;
+  responseTime?: number; // seconds
+  declineReason?: string;
+  distance?: number; // km from pickup
+  rating?: number;
+  isOnTrip?: boolean;
+  kpiImpact?: {
+    acceptanceRate?: number;
+    responseTime?: number;
+    backToBackOffered?: boolean;
+  };
+}
+
+interface CommunicationEvent {
+  id: string;
+  timestamp: Date;
+  type: 'call' | 'message' | 'system_notification';
+  direction: 'passenger_to_driver' | 'driver_to_passenger' | 'system_to_passenger' | 'system_to_driver';
+  duration?: number; // for calls, in seconds
+  content?: string; // for messages
+  status: 'sent' | 'delivered' | 'read' | 'failed';
+  isPrivate: boolean; // RBAC control
+}
+
 interface BookingDetails {
   id: string;
   bookingId: string;
@@ -160,6 +201,9 @@ interface BookingDetails {
   lastLocationUpdate?: Date;
   requestTimeout?: Date;
   promoCode?: string;
+  tripTimeline?: TripTimelineEvent[];
+  driverAssignmentHistory?: DriverAssignmentAttempt[];
+  communicationHistory?: CommunicationEvent[];
 }
 
 // Legacy interface for compatibility
@@ -170,7 +214,7 @@ interface Booking {
   driver: string;
   pickup: string;
   destination: string;
-  status: 'Active' | 'Completed' | 'Cancelled' | 'Scheduled' | 'Requesting';
+  status: 'Active' | 'Completed' | 'Cancelled' | 'Scheduled' | 'Requesting' | 'Failed';
   serviceType: string;
   fare: number;
   duration: string;
@@ -182,6 +226,7 @@ interface Booking {
 
 const BookingsPage = () => {
   const { selectedServiceType, serviceTypes } = useServiceType();
+  const { hasPermission, canPerformAction } = useRBAC();
   const [activeTab, setActiveTab] = useState('requesting'); // Start with requesting tab
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -195,6 +240,11 @@ const BookingsPage = () => {
   // Modal system - no longer using expandedBookings
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [forceAssignModal, setForceAssignModal] = useState<string | null>(null);
+  const [assigningDriverId, setAssigningDriverId] = useState<string | null>(null);
+  const [assignmentStatus, setAssignmentStatus] = useState<'idle' | 'success' | 'failed'>('idle');
+  const [assignmentMessage, setAssignmentMessage] = useState<string>('');
+  const [cancelledDriverId, setCancelledDriverId] = useState<string | null>(null);
+  const [expandedTimelineEvents, setExpandedTimelineEvents] = useState<Set<string>>(new Set());
   const [lastUpdateTime, setLastUpdateTime] = useState(new Date());
   const [recentChanges, setRecentChanges] = useState<Set<string>>(new Set());
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -221,17 +271,22 @@ const BookingsPage = () => {
   const modalTabs = [
     { id: 'overview', name: 'Overview', icon: Eye },
     { id: 'timeline', name: 'Trip Timeline', icon: History },
+    { id: 'communication', name: 'Communication', icon: MessageCircle },
     { id: 'financials', name: 'Fare & Financials', icon: CreditCard },
     { id: 'passenger', name: 'Passenger', icon: User },
-    { id: 'driver', name: 'Driver & Vehicle', icon: UserCheck },
-    { id: 'compliance', name: 'Risk & Compliance', icon: Shield },
-    { id: 'audit', name: 'Audit & Actions', icon: Settings }
+    { id: 'driver-vehicle', name: 'Driver & Vehicle', icon: Car },
+    { id: 'audit', name: 'Audit & Actions', icon: Settings },
+    { id: 'aiml', name: 'AI/ML', icon: Brain }
   ];
 
   // Mock user role for RBAC - in real app this comes from auth context
   const [userRole] = useState<'admin' | 'finance' | 'operations' | 'support'>('admin'); // Change to test RBAC
   const hasFinanceAccess = useCallback(() => {
     return ['admin', 'finance'].includes(userRole);
+  }, [userRole]);
+  
+  const hasCustomerProfileAccess = useCallback(() => {
+    return ['admin', 'operations', 'support'].includes(userRole);
   }, [userRole]);
   
   // Using consistent variable naming throughout
@@ -247,13 +302,14 @@ const BookingsPage = () => {
     dropoff: 180,
     service: 120,
     status: 140, // Increased width to accommodate date/time in scheduled tab
+    attempts: 80, // Column for tracking passenger booking attempts
     fare: 100
   });
 
   // Generate enhanced mock booking data with realistic Metro Manila locations
   const generateMockBookings = useCallback((): Booking[] => {
-    const statuses: ('Active' | 'Completed' | 'Cancelled' | 'Scheduled' | 'Requesting')[] = 
-      ['Active', 'Completed', 'Cancelled', 'Scheduled', 'Requesting'];
+    const statuses: ('Active' | 'Completed' | 'Cancelled' | 'Scheduled' | 'Requesting' | 'Failed')[] = 
+      ['Active', 'Completed', 'Cancelled', 'Scheduled', 'Requesting', 'Failed'];
     const serviceTypes = ['Car', 'Motorcycle', 'SUV', 'Taxi', 'Premium'];
     
     const locations = [
@@ -289,7 +345,12 @@ const BookingsPage = () => {
       const serviceType = serviceTypes[Math.floor(Math.random() * serviceTypes.length)];
       const baseFare = 80 + Math.random() * 420;
       const distance = parseFloat((Math.random() * 20 + 1).toFixed(1));
-      const requestedAt = new Date(Date.now() - Math.random() * 86400000 * 3);
+      // Set appropriate creation time based on status
+      const requestedAt = status === 'Requesting' 
+        ? new Date(Date.now() - Math.random() * 180000) // Requesting: 0-3 minutes ago
+        : status === 'Failed' 
+        ? new Date(Date.now() - (180000 + Math.random() * 600000)) // Failed: 3-13 minutes ago  
+        : new Date(Date.now() - Math.random() * 86400000 * 3); // Others: up to 3 days ago
       
       const hasDriver = !['Requesting'].includes(status);
       const driverName = hasDriver ? driverNames[Math.floor(Math.random() * driverNames.length)] : 'Unassigned';
@@ -386,7 +447,226 @@ const BookingsPage = () => {
         emergencyFlag: Math.random() > 0.98,
         lastLocationUpdate: hasDriver && status === 'Active' ? new Date(Date.now() - Math.random() * 300000) : undefined,
         requestTimeout: status === 'Requesting' ? new Date(requestedAt.getTime() + 600000) : undefined,
-        promoCode: Math.random() > 0.85 ? 'SAVE20' : undefined
+        promoCode: Math.random() > 0.85 ? 'SAVE20' : undefined,
+        
+        // Generate trip timeline
+        tripTimeline: (() => {
+          const timeline: TripTimelineEvent[] = [];
+          let currentTime = requestedAt.getTime();
+          
+          // Ride Requested
+          timeline.push({
+            id: `timeline_${i}_1`,
+            status: 'requested',
+            timestamp: new Date(currentTime),
+            description: 'Trip requested by passenger',
+            location: pickup.coords,
+            metadata: { serviceType, pickupAddress: pickup.name }
+          });
+          
+          if (hasDriver || status === 'Failed') {
+            // Assigning phase
+            currentTime += 30000 + Math.random() * 90000; // 30s - 2min
+            timeline.push({
+              id: `timeline_${i}_2`,
+              status: 'assigning',
+              timestamp: new Date(currentTime),
+              duration: currentTime - timeline[timeline.length - 1].timestamp.getTime(),
+              description: 'Finding available drivers',
+              metadata: { attemptedDrivers: 2 + Math.floor(Math.random() * 3) }
+            });
+          }
+          
+          if (hasDriver) {
+            // Driver assigned
+            currentTime += 15000 + Math.random() * 45000; // 15s - 1min
+            timeline.push({
+              id: `timeline_${i}_3`, 
+              status: 'assigned',
+              timestamp: new Date(currentTime),
+              duration: currentTime - timeline[timeline.length - 1].timestamp.getTime(),
+              description: `Driver ${driverName} assigned`,
+              metadata: { driverId: `DR${String(i % 20 + 1).padStart(3, '0')}`, driverName }
+            });
+            
+            if (status !== 'Cancelled') {
+              // Enroute to pickup
+              currentTime += 60000 + Math.random() * 180000; // 1-4min
+              timeline.push({
+                id: `timeline_${i}_4`,
+                status: 'enroute_pickup',
+                timestamp: new Date(currentTime),
+                duration: currentTime - timeline[timeline.length - 1].timestamp.getTime(),
+                description: 'Driver heading to pickup location',
+                location: pickup.coords
+              });
+              
+              if (['Active', 'Completed'].includes(status)) {
+                // Pickup
+                currentTime += 300000 + Math.random() * 600000; // 5-15min
+                timeline.push({
+                  id: `timeline_${i}_5`,
+                  status: 'passenger_pickup',
+                  timestamp: new Date(currentTime),
+                  duration: currentTime - timeline[timeline.length - 1].timestamp.getTime(),
+                  description: 'Passenger picked up',
+                  location: pickup.coords
+                });
+                
+                if (status === 'Completed') {
+                  // Enroute to destination
+                  currentTime += 60000; // 1min
+                  timeline.push({
+                    id: `timeline_${i}_6`,
+                    status: 'enroute_destination',
+                    timestamp: new Date(currentTime),
+                    duration: currentTime - timeline[timeline.length - 1].timestamp.getTime(),
+                    description: 'Heading to destination',
+                    location: destination.coords
+                  });
+                  
+                  // Trip completed
+                  const estimatedDurationMinutes = 15 + Math.random() * 30; // 15-45 min
+                  currentTime += estimatedDurationMinutes * 60000; // estimated duration
+                  timeline.push({
+                    id: `timeline_${i}_7`,
+                    status: 'completed',
+                    timestamp: new Date(currentTime),
+                    duration: currentTime - timeline[timeline.length - 1].timestamp.getTime(),
+                    description: 'Trip completed successfully',
+                    location: destination.coords,
+                    metadata: { finalFare: baseFare + (distance * 15) + 20 } // Calculate basic fare
+                  });
+                }
+              }
+            }
+          }
+          
+          if (status === 'Cancelled' || status === 'Failed') {
+            const lastEvent = timeline[timeline.length - 1];
+            timeline.push({
+              id: `timeline_${i}_cancel`,
+              status: 'cancelled',
+              timestamp: new Date(lastEvent.timestamp.getTime() + 120000),
+              duration: 120000,
+              description: status === 'Failed' ? 'No drivers available - request timed out' : 'Trip cancelled',
+              metadata: { reason: status === 'Failed' ? 'timeout' : 'user_cancellation' }
+            });
+          }
+          
+          return timeline;
+        })(),
+        
+        // Generate driver assignment history
+        driverAssignmentHistory: hasDriver || status === 'Failed' ? (() => {
+          const attempts: DriverAssignmentAttempt[] = [];
+          const driverPool = [
+            'Carlos Mendoza', 'Maria Santos', 'Juan dela Cruz', 'Elena Rodriguez', 
+            'Miguel Torres', 'Ana Reyes', 'Jose Garcia', 'Carmen Lopez'
+          ];
+          
+          // Use the same count as shown in timeline metadata
+          const numAttempts = 2 + Math.floor(Math.random() * 3); // 2-4 drivers
+          let offerTime = requestedAt.getTime() + 30000; // Start 30s after request
+          
+          for (let j = 0; j < numAttempts; j++) {
+            const isLastAttempt = j === numAttempts - 1;
+            const isOnTrip = Math.random() > 0.7; // 30% chance driver is on another trip
+            const attemptStatus = isLastAttempt && hasDriver ? 'accepted' : 
+                                isLastAttempt ? 'timeout' : 
+                                Math.random() > 0.6 ? 'declined' : 'timeout';
+            
+            const responseTime = attemptStatus === 'accepted' ? 8 + Math.random() * 12 : // 8-20s for accepts
+                               attemptStatus === 'declined' ? 15 + Math.random() * 25 : // 15-40s for declines  
+                               45; // 45s timeout
+            
+            const declineReasons = isOnTrip ? 
+              ['Currently on trip', 'Back-to-back trip offered'] : 
+              ['Too far away', 'Break time', 'Traffic concerns', 'Vehicle maintenance'];
+            
+            attempts.push({
+              id: `attempt_${i}_${j}`,
+              driverId: `DR${String(j + 1).padStart(3, '0')}`,
+              driverName: j === 0 && hasDriver ? driverName : driverPool[j % driverPool.length],
+              offeredAt: new Date(offerTime),
+              status: attemptStatus,
+              responseAt: attemptStatus !== 'timeout' ? new Date(offerTime + responseTime * 1000) : undefined,
+              responseTime: Math.floor(responseTime),
+              declineReason: attemptStatus === 'declined' ? 
+                declineReasons[Math.floor(Math.random() * declineReasons.length)] : undefined,
+              distance: 0.8 + Math.random() * 2.2, // 0.8-3km
+              rating: 4.2 + Math.random() * 0.8,
+              isOnTrip: isOnTrip,
+              kpiImpact: attemptStatus === 'declined' || attemptStatus === 'timeout' ? {
+                acceptanceRate: isOnTrip ? -0.8 : -1.3,
+                responseTime: attemptStatus === 'timeout' ? -2.1 : -0.6,
+                backToBackOffered: isOnTrip
+              } : null
+            });
+            
+            offerTime += responseTime * 1000 + 5000; // Add response time + 5s gap
+          }
+          
+          return attempts;
+        })() : [],
+        
+        // Generate communication history
+        communicationHistory: hasDriver ? (() => {
+          const communications: CommunicationEvent[] = [];
+          let commTime = requestedAt.getTime() + 180000; // Start 3min after request
+          
+          // System notifications
+          communications.push({
+            id: `comm_${i}_1`,
+            timestamp: new Date(commTime),
+            type: 'system_notification',
+            direction: 'system_to_passenger',
+            content: `Driver ${driverName} has been assigned to your trip`,
+            status: 'delivered',
+            isPrivate: false
+          });
+          
+          if (Math.random() > 0.6) {
+            // Driver calls passenger
+            commTime += 120000 + Math.random() * 180000; // 2-5min later
+            communications.push({
+              id: `comm_${i}_2`,
+              timestamp: new Date(commTime),
+              type: 'call',
+              direction: 'driver_to_passenger',
+              duration: 25 + Math.floor(Math.random() * 95), // 25-120 seconds
+              status: 'delivered',
+              isPrivate: true // RBAC controlled
+            });
+          }
+          
+          if (Math.random() > 0.7) {
+            // Text message exchange
+            commTime += 60000 + Math.random() * 120000; // 1-3min later
+            communications.push({
+              id: `comm_${i}_3`,
+              timestamp: new Date(commTime),
+              type: 'message',
+              direction: 'passenger_to_driver',
+              content: 'I\'m wearing a blue shirt, standing near the entrance',
+              status: 'read',
+              isPrivate: true // RBAC controlled
+            });
+            
+            commTime += 30000; // 30s later
+            communications.push({
+              id: `comm_${i}_4`,
+              timestamp: new Date(commTime),
+              type: 'message', 
+              direction: 'driver_to_passenger',
+              content: 'Copy, I can see you. I\'ll be there in 2 minutes.',
+              status: 'read',
+              isPrivate: true // RBAC controlled
+            });
+          }
+          
+          return communications;
+        })() : []
       };
       
       // Return legacy format with enhanced data
@@ -465,6 +745,18 @@ const BookingsPage = () => {
           }
         }
         
+        // Check for timed out requesting bookings and move to Failed status
+        updatedBookings.forEach(booking => {
+          if (booking.status === 'Requesting') {
+            const elapsed = Math.floor((Date.now() - booking.createdAt.getTime()) / 1000);
+            if (elapsed >= 180) { // 3 minutes timeout
+              booking.status = 'Failed';
+              hasChanges = true;
+              newRecentChanges.add(booking.id);
+            }
+          }
+        });
+        
         // Add new requesting bookings occasionally
         if (Math.random() > 0.95) {
           const newBookingData = generateMockBookings().find(b => b.status === 'Requesting');
@@ -513,6 +805,7 @@ const BookingsPage = () => {
     const statusMap = {
       'requesting': 'Requesting',
       'active-trips': 'Active',
+      'failed': 'Failed',
       'completed': 'Completed',
       'cancelled': 'Cancelled',
       'scheduled': 'Scheduled'
@@ -659,6 +952,7 @@ const BookingsPage = () => {
   const tabs = [
     { id: 'requesting', name: 'Requesting', icon: Timer, count: statusCounts['Requesting'] || 0, urgent: true },
     { id: 'active-trips', name: 'Active Trips', icon: Activity, count: statusCounts['Active'] || 0 },
+    { id: 'failed', name: 'Failed', icon: AlertTriangle, count: statusCounts['Failed'] || 0, urgent: true },
     { id: 'cancelled', name: 'Cancelled', icon: XCircle, count: statusCounts['Cancelled'] || 0 },
     { id: 'scheduled', name: 'Scheduled', icon: Calendar, count: statusCounts['Scheduled'] || 0 },
     { id: 'completed', name: 'Completed', icon: CheckCircle, count: statusCounts['Completed'] || 0 }
@@ -682,6 +976,8 @@ const BookingsPage = () => {
         return 'bg-[#F0FDF4] text-[#16A34A]';
       case 'Cancelled':
         return 'bg-[#FEF2F2] text-[#DC2626]';
+      case 'Failed':
+        return 'bg-[#FEF2F2] text-[#B91C1C]';
       case 'Scheduled':
         return 'bg-[#F3E8FF] text-[#7C3AED]';
       // Trip types for non-scheduled tabs
@@ -796,11 +1092,12 @@ const BookingsPage = () => {
   
   // Get time elapsed for requesting bookings with 3-minute timeout
   const getRequestingTime = useCallback((booking: Booking) => {
-    if (booking.status !== 'Requesting') return '';
+    // If we're on the requesting tab, calculate time for any booking shown
     const elapsed = Math.floor((Date.now() - booking.createdAt.getTime()) / 1000);
-    if (elapsed >= 180) return 'TIMED OUT';
-    const minutes = Math.floor(elapsed / 60);
-    const seconds = elapsed % 60;
+    // Ensure minimum values to avoid negative times
+    const safeElapsed = Math.max(0, elapsed);
+    const minutes = Math.floor(safeElapsed / 60);
+    const seconds = safeElapsed % 60;
     return `${minutes}m ${seconds}s`;
   }, []);
   
@@ -812,11 +1109,59 @@ const BookingsPage = () => {
     if (elapsed < 120) return 'text-yellow-600 bg-yellow-50 border-yellow-200';
     return 'text-red-600 bg-red-50 border-red-200';
   }, []);
+
+  // Get booking attempts count for a passenger in the last 10 minutes
+  const getPassengerAttempts = useCallback((booking: Booking) => {
+    if (booking.status !== 'Requesting') return 0;
+    
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+    const passengerName = booking.passenger;
+    
+    // Count all bookings (requesting, failed, completed) by this passenger in last 10 minutes
+    const recentAttempts = bookings.filter(b => {
+      const isSamePassenger = b.passenger === passengerName;
+      const isWithinTimeframe = b.createdAt >= tenMinutesAgo;
+      const isAttemptStatus = ['Requesting', 'Failed', 'Completed', 'Cancelled'].includes(b.status);
+      return isSamePassenger && isWithinTimeframe && isAttemptStatus;
+    }).length;
+    
+    return recentAttempts;
+  }, [bookings]);
   
   // Toggle booking expansion
   const toggleBookingExpansion = useCallback((bookingId: string) => {
     setSelectedBookingModal(bookingId);
     setActiveModalTab('overview');
+  }, []);
+
+  // Helper functions for RBAC contact controls
+  const canContactPassenger = useCallback((booking: Booking) => {
+    // Check if status allows contact
+    const statusAllowsContact = !['Cancelled', 'Completed'].includes(booking.status);
+    // Check permissions
+    const hasContactPermission = hasPermission('contact_passenger_masked') || hasPermission('contact_passenger_unmasked');
+    return statusAllowsContact && hasContactPermission;
+  }, [hasPermission]);
+
+  const canContactDriver = useCallback((booking: Booking) => {
+    // Check if status allows contact  
+    const statusAllowsContact = !['Cancelled', 'Completed'].includes(booking.status);
+    // Check permissions
+    const hasContactPermission = hasPermission('contact_driver_masked') || hasPermission('contact_driver_unmasked');
+    return statusAllowsContact && hasContactPermission;
+  }, [hasPermission]);
+
+  // Timeline event expansion handler
+  const toggleTimelineEvent = useCallback((eventId: string) => {
+    setExpandedTimelineEvents(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(eventId)) {
+        newSet.delete(eventId);
+      } else {
+        newSet.add(eventId);
+      }
+      return newSet;
+    });
   }, []);
   
   // Quick actions handlers
@@ -827,20 +1172,81 @@ const BookingsPage = () => {
   const handleCallDriver = useCallback((phone: string) => {
     window.open(`tel:${phone}`);
   }, []);
+
+  const handleTrackLocation = useCallback((booking: Booking) => {
+    // Open tracking page in new tab with driver details
+    const trackingUrl = `/tracking?driver=${encodeURIComponent(booking.details.driver?.name || '')}&plate=${encodeURIComponent(booking.details.driver?.vehiclePlate || '')}&booking=${booking.id}`;
+    window.open(trackingUrl, '_blank', 'width=1200,height=800');
+  }, []);
+
+  const handleMessageDriver = useCallback((booking: Booking) => {
+    // In a real app, this would open a messaging interface
+    const message = `Message sent to ${booking.details.driver?.name}\n\nThis would open the in-app messaging system in a real implementation.`;
+    alert(message);
+  }, []);
+
+  const handleViewDriverProfile = useCallback((booking: Booking) => {
+    // In a real app, this would navigate to full driver profile
+    alert(`Opening full profile for:\n${booking.details.driver?.name}\nDriver ID: DR-${Math.floor(Math.random() * 10000)}\n\nThis would navigate to the complete driver profile page.`);
+  }, []);
+
+  const handleVehicleHistory = useCallback((booking: Booking) => {
+    // In a real app, this would show vehicle maintenance and trip history
+    alert(`Vehicle History for ${booking.details.driver?.vehicleModel}\nPlate: ${booking.details.driver?.vehiclePlate}\n\n• Last service: ${Math.floor(Math.random() * 30) + 1} days ago\n• Total trips: ${Math.floor(Math.random() * 5000) + 1000}\n• Maintenance status: Good\n\nThis would open detailed vehicle records.`);
+  }, []);
   
-  const handleForceAssign = useCallback((bookingId: string) => {
-    setBookings(prev => prev.map(b => {
-      if (b.id === bookingId) {
-        return {
-          ...b,
-          status: 'Active' as any,
-          driver: 'Force Assigned Driver'
-        };
+  const handleForceAssign = useCallback((bookingId: string, driverId: string, driverName: string) => {
+    // Reset states and set assigning
+    setAssigningDriverId(driverId);
+    setAssignmentStatus('idle');
+    setAssignmentMessage('');
+    
+    // Simulate assignment process with delay
+    setTimeout(() => {
+      // Simulate 70% success rate
+      const isSuccess = Math.random() > 0.3;
+      
+      if (isSuccess) {
+        // Success: Update booking and close modal
+        setBookings(prev => prev.map(b => {
+          if (b.id === bookingId) {
+            return {
+              ...b,
+              status: 'Active' as any,
+              driver: driverName
+            };
+          }
+          return b;
+        }));
+        
+        setRecentChanges(prev => new Set([...prev, bookingId]));
+        setAssignmentStatus('success');
+        setAssignmentMessage(`Successfully assigned ${driverName} to this booking!`);
+        
+        // Close modal after showing success message
+        setTimeout(() => {
+          setAssigningDriverId(null);
+          setAssignmentStatus('idle');
+          setAssignmentMessage('');
+          setForceAssignModal(null);
+        }, 2000);
+        
+      } else {
+        // Failure: Show error and allow retry
+        const failureReasons = [
+          `${driverName} declined the assignment`,
+          `${driverName} is no longer available`,
+          'Network error occurred during assignment',
+          `${driverName} did not respond in time`
+        ];
+        const randomReason = failureReasons[Math.floor(Math.random() * failureReasons.length)];
+        
+        setAssignmentStatus('failed');
+        setAssignmentMessage(randomReason);
+        setCancelledDriverId(driverId);
+        setAssigningDriverId(null);
       }
-      return b;
-    }));
-    setForceAssignModal(null);
-    setRecentChanges(prev => new Set([...prev, bookingId]));
+    }, 2000); // 2 second delay to show assigning state
   }, []);
   
   const handleSOSAlert = useCallback((bookingId: string) => {
@@ -994,12 +1400,12 @@ const BookingsPage = () => {
                     activeTab === tab.id
                       ? 'bg-blue-100 text-blue-700'
                       : isUrgent
-                      ? 'bg-red-100 text-red-700 animate-pulse'
+                      ? `bg-red-100 text-red-700 ${tab.id === 'requesting' ? 'animate-pulse' : ''}`
                       : 'bg-gray-100 text-gray-600'
                   }`}>
                     {tab.count}
                   </span>
-                  {isUrgent && activeTab !== tab.id && (
+                  {isUrgent && activeTab !== tab.id && tab.id === 'requesting' && (
                     <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-ping"></div>
                   )}
                 </button>
@@ -1356,7 +1762,7 @@ const BookingsPage = () => {
                         />
                       </th>
                       <th className="text-left py-2 font-medium bg-white relative" style={{width: `${columnWidths.pickupDateTime}px`}}>
-                        Pickup Date/Time
+                        Type
                         <div 
                           className="absolute right-0 top-0 w-1 h-full cursor-col-resize hover:bg-gray-300 transition-colors"
                           onMouseDown={(e) => handleMouseDown(e, 'pickupDateTime')}
@@ -1397,8 +1803,22 @@ const BookingsPage = () => {
                           onMouseDown={(e) => handleMouseDown(e, 'service')}
                         />
                       </th>
+                      {activeTab === 'requesting' && (
+                        <th className="text-center py-2 font-medium bg-white relative" style={{width: `${columnWidths.attempts}px`}}>
+                          Attempts
+                          <div 
+                            className="absolute right-0 top-0 w-1 h-full cursor-col-resize hover:bg-gray-300 transition-colors"
+                            onMouseDown={(e) => handleMouseDown(e, 'attempts')}
+                          />
+                        </th>
+                      )}
                       <th className="text-center py-2 font-medium bg-white relative" style={{width: `${columnWidths.status}px`}}>
-                        {activeTab === 'scheduled' ? 'Pickup Date/Time' : 'Type'}
+                        {activeTab === 'requesting' ? 'Time Elapsed' : 
+                         activeTab === 'active-trips' ? 'Status' : 
+                         activeTab === 'failed' ? 'Status' :
+                         activeTab === 'cancelled' ? 'Status' : 
+                         activeTab === 'scheduled' ? 'Status' : 
+                         activeTab === 'completed' ? 'Status' : 'Status'}
                         <div 
                           className="absolute right-0 top-0 w-1 h-full cursor-col-resize hover:bg-gray-300 transition-colors"
                           onMouseDown={(e) => handleMouseDown(e, 'status')}
@@ -1438,38 +1858,19 @@ const BookingsPage = () => {
                             </td>
                             <td className="py-3 text-gray-700 text-sm">
                               <div>
-                                <div className="font-medium">
-                                  {(() => {
-                                    const pickupDate = new Date(booking.createdAt);
-                                    const now = new Date();
-                                    const timeDiff = Math.round((pickupDate.getTime() - now.getTime()) / (1000 * 60));
-                                    
-                                    if (booking.status === 'Scheduled') {
-                                      // For scheduled rides, show future pickup time
-                                      const scheduledTime = new Date(booking.createdAt.getTime() + (Math.random() * 24 * 60 * 60 * 1000)); // Add random hours for demo
-                                      const timeToPickup = Math.round((scheduledTime.getTime() - now.getTime()) / (1000 * 60));
-                                      return (
-                                        <>
-                                          <div>{scheduledTime.toLocaleDateString()} {scheduledTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-                                          <div className="text-xs text-blue-600">({timeToPickup > 0 ? `in ${Math.round(timeToPickup/60)}h ${timeToPickup%60}m` : 'now'})</div>
-                                        </>
-                                      );
-                                    } else {
-                                      // For other statuses, show request time
-                                      return (
-                                        <>
-                                          <div>{pickupDate.toLocaleDateString()} {pickupDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-                                          <div className="text-xs text-gray-500">requested</div>
-                                        </>
-                                      );
-                                    }
-                                  })()}
-                                </div>
+                                <span className="text-sm">{getTripType(booking)}</span>
                               </div>
                             </td>
                             <td className="py-3 text-gray-900 max-w-32 truncate">
                               <div>
-                                <div className="text-sm">{booking.passenger}</div>
+                                <div className="text-sm">{(() => {
+                                  const fullName = booking.passenger;
+                                  const parts = fullName.split(' ');
+                                  if (parts.length >= 2) {
+                                    return `${parts[0]} ${parts[parts.length - 1].charAt(0)}.`;
+                                  }
+                                  return fullName;
+                                })()}</div>
                                 {booking.details?.passenger.rating && (
                                   <div className="flex items-center space-x-1 text-xs text-gray-500">
                                     <Star className="w-2 h-2 text-yellow-400 fill-current" />
@@ -1480,23 +1881,20 @@ const BookingsPage = () => {
                             </td>
                             <td className="py-3 text-gray-700 max-w-32">
                               <div>
-                                <div className="text-sm">{booking.driver}</div>
+                                <div className="text-sm">{(() => {
+                                  if (booking.driver === 'Unassigned') return 'Unassigned';
+                                  const fullName = booking.driver;
+                                  const parts = fullName.split(' ');
+                                  if (parts.length >= 2) {
+                                    return `${parts[0]} ${parts[parts.length - 1].charAt(0)}.`;
+                                  }
+                                  return fullName;
+                                })()}</div>
                                 {booking.details?.driver?.rating && booking.driver !== 'Unassigned' && (
                                   <div className="flex items-center space-x-1 text-xs text-gray-500">
                                     <Star className="w-2 h-2 text-yellow-400 fill-current" />
                                     <span>{booking.details.driver.rating.toFixed(1)}</span>
                                   </div>
-                                )}
-                                {booking.status === 'Requesting' && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setForceAssignModal(booking.id);
-                                    }}
-                                    className="mt-1 px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded hover:bg-orange-200"
-                                  >
-                                    Assign
-                                  </button>
                                 )}
                               </div>
                             </td>
@@ -1544,10 +1942,79 @@ const BookingsPage = () => {
                                 </span>
                               </div>
                             </td>
+                            {activeTab === 'requesting' && (
+                              <td className="text-center py-3">
+                                <div className="flex flex-col items-center justify-center">
+                                  <span className="text-sm font-semibold text-gray-900">
+                                    {getPassengerAttempts(booking)}
+                                  </span>
+                                  <span className="text-xs text-gray-500">
+                                    {getPassengerAttempts(booking) === 1 ? 'attempt' : 'attempts'}
+                                  </span>
+                                </div>
+                              </td>
+                            )}
                             <td className="text-center py-3">
-                              {activeTab === 'scheduled' ? (
-                                <div className="text-sm text-gray-700 font-medium">
-                                  {getDisplayStatus(booking, activeTab)}
+                              {activeTab === 'requesting' ? (
+                                <div className="text-center">
+                                  <div className={`text-xs font-medium px-2 py-1 rounded border ${getRequestingColor(booking)}`}>
+                                    {getRequestingTime(booking)}
+                                  </div>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setForceAssignModal(booking.id);
+                                      setCancelledDriverId(null);
+                                      setAssignmentStatus('idle');
+                                      setAssignmentMessage('');
+                                    }}
+                                    className="mt-1 px-2 py-0.5 bg-orange-100 text-orange-700 text-xs rounded hover:bg-orange-200"
+                                  >
+                                    Assign
+                                  </button>
+                                </div>
+                              ) : activeTab === 'active-trips' ? (
+                                <div className="text-center">
+                                  <div className="text-sm font-medium text-blue-600">
+                                    {Math.random() > 0.5 ? 'Pick' : 'Drop'}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    {Math.floor(Math.random() * 15 + 1)}m elapsed
+                                  </div>
+                                </div>
+                              ) : activeTab === 'failed' ? (
+                                <div className="text-center">
+                                  <div className="text-sm font-medium text-red-600">Failed</div>
+                                  <div className="text-xs text-gray-500">
+                                    Timed Out
+                                  </div>
+                                </div>
+                              ) : activeTab === 'cancelled' ? (
+                                <div className="text-center">
+                                  <div className="text-sm font-medium text-red-600">Cancelled</div>
+                                  <div className="text-xs text-gray-500">
+                                    {Math.random() > 0.5 ? 'Customer' : 'Driver'}
+                                  </div>
+                                </div>
+                              ) : activeTab === 'scheduled' ? (
+                                <div className="text-center">
+                                  <div className="text-sm font-medium text-green-600">Scheduled</div>
+                                  <div className="text-xs text-gray-500">
+                                    {(() => {
+                                      const scheduledTime = new Date(booking.createdAt.getTime() + (Math.random() * 24 * 60 * 60 * 1000));
+                                      return `${scheduledTime.toLocaleDateString()} ${scheduledTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+                                    })()} 
+                                  </div>
+                                </div>
+                              ) : activeTab === 'completed' ? (
+                                <div className="text-center">
+                                  <div className="text-sm font-medium text-green-600">Completed</div>
+                                  <div className="text-xs text-gray-500">
+                                    {(() => {
+                                      const completedTime = new Date(booking.createdAt.getTime() + (Math.random() * 2 * 60 * 60 * 1000));
+                                      return `${completedTime.toLocaleDateString()} ${completedTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+                                    })()} 
+                                  </div>
                                 </div>
                               ) : (
                                 <span className={`px-2 py-1 rounded-full text-sm font-medium ${getStatusColor(getDisplayStatus(booking, activeTab))}`}>
@@ -1573,7 +2040,7 @@ const BookingsPage = () => {
                       );
                     }) : (
                       <tr>
-                        <td colSpan={7} className="py-8 text-center text-gray-500">
+                        <td colSpan={activeTab === 'requesting' ? 8 : 7} className="py-8 text-center text-gray-500">
                           <div className="flex flex-col items-center">
                             {(() => {
                               const Icon = tabs.find(t => t.id === activeTab)?.icon || Activity;
@@ -1628,16 +2095,24 @@ const BookingsPage = () => {
       {/* Enhanced Force Assignment Modal */}
       {forceAssignModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
-            <div className="bg-gradient-to-r from-orange-500 to-red-500 px-6 py-4 text-white">
+          <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-hidden border border-[#E5E7EB]">
+            <div className="px-6 py-4 bg-white border-b border-[#E5E7EB]">
               <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-semibold font-[Inter]">🚨 Force Assign Driver</h2>
-                  <p className="text-orange-100 text-sm">Booking #{bookings.find(b => b.id === forceAssignModal)?.bookingId} - Urgent Assignment Required</p>
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-[#DBEAFE] rounded-lg flex items-center justify-center">
+                    <UserPlus className="w-5 h-5 text-[#3B82F6]" />
+                  </div>
+                  <div>
+                    <h2 className="text-[20px] font-semibold text-[#111827] leading-tight">Assign Driver</h2>
+                    <p className="text-[12px] text-[#6B7280] mt-1">Booking #{bookings.find(b => b.id === forceAssignModal)?.bookingId} • {(() => {
+                      const booking = bookings.find(b => b.id === forceAssignModal);
+                      return booking?.status === 'Scheduled' ? 'Scheduled Booking' : 'Urgent Assignment';
+                    })()}</p>
+                  </div>
                 </div>
                 <button 
                   onClick={() => setForceAssignModal(null)} 
-                  className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
+                  className="p-2 hover:bg-[#F3F4F6] rounded-lg transition-colors text-[#9CA3AF] hover:text-[#6B7280]"
                 >
                   <XCircle className="w-5 h-5" />
                 </button>
@@ -1645,42 +2120,115 @@ const BookingsPage = () => {
             </div>
 
             <div className="p-6">
-              <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                <div className="flex items-center gap-2 text-orange-800 text-sm">
-                  <AlertTriangle className="w-4 h-4" />
-                  <span>This booking has been waiting for {getRequestingTime(bookings.find(b => b.id === forceAssignModal)!)}. Select a driver below:</span>
+              {(() => {
+                const booking = bookings.find(b => b.id === forceAssignModal);
+                if (booking?.status === 'Requesting') {
+                  return (
+                    <div className="mb-4 p-4 bg-[#FEF3C7] border border-[#FACC15] rounded-lg">
+                      <div className="flex items-center gap-3 text-[#92400E]">
+                        <Clock className="w-4 h-4 flex-shrink-0" />
+                        <span className="text-[14px] font-medium">This booking has been waiting for {getRequestingTime(booking)}. Select a driver to assign immediately:</span>
+                      </div>
+                    </div>
+                  );
+                } else if (booking?.status === 'Scheduled') {
+                  return (
+                    <div className="mb-4 p-4 bg-[#DBEAFE] border border-[#3B82F6] rounded-lg">
+                      <div className="flex items-center gap-3 text-[#1E40AF]">
+                        <Calendar className="w-4 h-4 flex-shrink-0" />
+                        <span className="text-[14px] font-medium">Showing drivers available for this scheduled booking. Select a driver to pre-assign:</span>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+
+              {/* Assignment Status Display */}
+              {assignmentStatus === 'success' && (
+                <div className="mb-4 p-4 bg-[#D1FAE5] border border-[#10B981] rounded-lg">
+                  <div className="flex items-center gap-3 text-[#047857]">
+                    <div className="w-4 h-4 bg-[#10B981] rounded-full flex items-center justify-center">
+                      <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <span className="text-[14px] font-medium">{assignmentMessage}</span>
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {assignmentStatus === 'failed' && (
+                <div className="mb-4 p-4 bg-[#FEE2E2] border border-[#EF4444] rounded-lg">
+                  <div className="flex items-center gap-3 text-[#DC2626]">
+                    <div className="w-4 h-4 bg-[#EF4444] rounded-full flex items-center justify-center">
+                      <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <span className="text-[14px] font-medium">{assignmentMessage}</span>
+                      <div className="text-[12px] text-[#DC2626] mt-1 font-medium">Driver KPI effect: Acceptance down 1.3% & Cancel up 2%</div>
+                      <div className="text-[12px] text-[#9CA3AF] mt-1">Please select another driver to retry the assignment.</div>
+                    </div>
+                  </div>
+                </div>
+              )}
               
-              <div className="space-y-3 max-h-96 overflow-y-auto">
-                {[
-                  { id: 'DR001', name: 'Carlos Mendoza', rating: 4.8, distance: 0.8, eta: 4, plate: 'ABC-1234', vehicle: 'Toyota Vios', status: 'Available', trips: 847 },
-                  { id: 'DR002', name: 'Maria Santos', rating: 4.9, distance: 1.2, eta: 6, plate: 'XYZ-5678', vehicle: 'Honda Click', status: 'Available', trips: 1205 },
-                  { id: 'DR003', name: 'Juan dela Cruz', rating: 4.7, distance: 2.1, eta: 8, plate: 'DEF-9012', vehicle: 'Toyota Fortuner', status: 'Available', trips: 632 }
-                ].map((driver) => (
-                  <div
-                    key={driver.id}
-                    onClick={() => handleForceAssign(forceAssignModal)}
-                    className="group p-4 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-orange-300 hover:bg-orange-50 transition-all duration-200 hover:shadow-md"
-                  >
+              <div className="space-y-4 max-h-96 overflow-y-auto">
+                {(() => {
+                  const booking = bookings.find(b => b.id === forceAssignModal);
+                  const allDrivers = [
+                    { id: 'DR001', name: 'Carlos Mendoza', rating: 4.8, distance: 0.8, eta: 4, plate: 'ABC-1234', vehicle: 'Toyota Vios', status: 'Available', trips: 847, available: true },
+                    { id: 'DR002', name: 'Maria Santos', rating: 4.9, distance: 1.2, eta: 6, plate: 'XYZ-5678', vehicle: 'Honda Click', status: 'Available', trips: 1205, available: true },
+                    { id: 'DR003', name: 'Juan dela Cruz', rating: 4.7, distance: 2.1, eta: 8, plate: 'DEF-9012', vehicle: 'Toyota Fortuner', status: 'Available', trips: 632, available: booking?.status !== 'Scheduled' },
+                    { id: 'DR004', name: 'Elena Rodriguez', rating: 4.6, distance: 1.5, eta: 7, plate: 'GHI-3456', vehicle: 'Honda City', status: 'Busy', trips: 543, available: false }
+                  ];
+                  
+                  // Filter drivers based on booking type
+                  const availableDrivers = booking?.status === 'Scheduled' 
+                    ? allDrivers.filter(d => d.available && d.status === 'Available')
+                    : allDrivers.filter(d => d.status === 'Available');
+                    
+                  // Sort drivers: cancelled driver goes to bottom
+                  const sortedDrivers = availableDrivers.sort((a, b) => {
+                    if (a.id === cancelledDriverId) return 1; // Move cancelled to bottom
+                    if (b.id === cancelledDriverId) return -1;
+                    return 0; // Keep original order for others
+                  });
+                    
+                  return sortedDrivers.map((driver) => {
+                    const isCancelled = driver.id === cancelledDriverId;
+                    return (
+                      <div
+                      key={driver.id}
+                      onClick={assigningDriverId || isCancelled ? undefined : () => handleForceAssign(forceAssignModal!, driver.id, driver.name)}
+                      className={`group p-4 border rounded-lg transition-all duration-200 ${
+                        isCancelled 
+                          ? 'border-[#FEE2E2] bg-[#FEF2F2] opacity-75 cursor-not-allowed' 
+                          : assigningDriverId 
+                          ? 'opacity-60 cursor-not-allowed border-[#E5E7EB]'
+                          : 'cursor-pointer hover:border-[#3B82F6] hover:bg-[#F9FAFB] border-[#E5E7EB]'
+                      }`}
+                    >
                     <div className="flex items-center gap-4">
                       {/* Driver Avatar */}
-                      <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0 text-white font-semibold">
+                      <div className="w-12 h-12 bg-[#F3F4F6] rounded-full flex items-center justify-center flex-shrink-0 text-[#374151] font-medium text-[14px]">
                         {driver.name.split(' ').map(n => n[0]).join('')}
                       </div>
                       
                       {/* Driver Info */}
                       <div className="flex-1">
-                        <div className="flex items-center justify-between mb-1">
-                          <h3 className="font-semibold text-gray-900">{driver.name}</h3>
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-[16px] font-semibold text-[#111827]">{driver.name}</h3>
                           <div className="text-right">
-                            <div className="text-sm font-medium text-orange-600">{driver.distance} km away</div>
-                            <div className="text-xs text-gray-500">ETA: {driver.eta} minutes</div>
+                            <div className="text-[14px] font-medium text-[#3B82F6]">{driver.distance} km away</div>
+                            <div className="text-[12px] text-[#6B7280]">ETA: {driver.eta} minutes</div>
                           </div>
                         </div>
                         
                         {/* Rating & Stats */}
-                        <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">
+                        <div className="flex items-center gap-4 text-[14px] text-[#6B7280] mb-3">
                           <div className="flex items-center gap-1">
                             {Array.from({ length: 5 }, (_, i) => (
                               <Star 
@@ -1697,32 +2245,51 @@ const BookingsPage = () => {
                           <span>•</span>
                           <span>{driver.trips} trips</span>
                           <span>•</span>
-                          <span className="text-green-600 font-medium">{driver.status}</span>
+                          <div className="flex items-center gap-1">
+                            <div className="w-2 h-2 bg-[#22C55E] rounded-full"></div>
+                            <span className="text-[#22C55E] font-medium text-[12px] uppercase tracking-wide">{driver.status}</span>
+                          </div>
                         </div>
                         
                         {/* Vehicle Info */}
                         <div className="flex items-center justify-between">
-                          <div className="text-sm text-gray-600">
-                            🚗 {driver.vehicle} - <span className="font-mono">{driver.plate}</span>
+                          <div className="text-[14px] text-[#6B7280]">
+                            🚗 {driver.vehicle} - <span className="font-mono text-[12px]">{driver.plate}</span>
                           </div>
-                          <button className="group-hover:bg-orange-500 group-hover:text-white px-3 py-1.5 bg-gray-100 text-gray-700 rounded-md text-sm font-medium transition-colors">
-                            Assign Now
-                          </button>
+                          {isCancelled ? (
+                            <div className="text-right">
+                              <div className="text-[12px] text-[#DC2626] font-medium">Declined Assignment</div>
+                              <div className="text-[10px] text-[#9CA3AF] mt-1">
+                                Acceptance ↓1.3%<br />
+                                Cancel ↑2%
+                              </div>
+                            </div>
+                          ) : (
+                            <button className={`px-4 py-2 rounded-lg text-[14px] font-medium transition-colors border ${
+                              assigningDriverId === driver.id 
+                                ? 'bg-[#3B82F6] text-white border-[#3B82F6] cursor-wait' 
+                                : 'group-hover:bg-[#3B82F6] group-hover:text-white bg-[#F9FAFB] text-[#374151] border-[#E5E7EB] group-hover:border-[#3B82F6]'
+                            }`} disabled={assigningDriverId === driver.id}>
+                              {assigningDriverId === driver.id ? 'Assigning...' : 'Select Driver'}
+                            </button>
+                          )}
+                        </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                    );
+                  })
+                })()}
               </div>
             </div>
             
-            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
-              <div className="text-sm text-gray-600">
-                💡 <strong>Tip:</strong> Choose the closest driver for fastest pickup
+            <div className="px-6 py-4 border-t border-[#E5E7EB] bg-[#F9FAFB] flex justify-between items-center">
+              <div className="text-[14px] text-[#6B7280]">
+                <span className="font-medium text-[#3B82F6]">💡 Tip:</span> Choose the closest available driver for fastest pickup
               </div>
               <button
                 onClick={() => setForceAssignModal(null)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                className="px-4 py-2 text-[14px] font-medium text-[#374151] bg-white border border-[#E5E7EB] rounded-lg hover:bg-[#F9FAFB] transition-colors"
               >
                 Cancel
               </button>
@@ -1738,7 +2305,7 @@ const BookingsPage = () => {
         
         return (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl h-[80vh] overflow-hidden flex flex-col">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl h-[92vh] overflow-hidden flex flex-col">
               {/* Clean Header */}
               <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-white">
                 <div className="flex items-center gap-4">
@@ -1784,7 +2351,7 @@ const BookingsPage = () => {
               {/* Modal Content */}
               <div className="flex-1 p-6 overflow-y-auto bg-white">
                 {activeModalTab === 'overview' && (
-                  <div className="space-y-8">
+                  <div className="space-y-6">
                     {/* Emergency Alert Banner - Show when emergency flag is active */}
                     {booking.details?.emergencyFlag && (
                       <div className="p-4 bg-red-100 border-2 border-red-500 rounded-lg">
@@ -1798,108 +2365,179 @@ const BookingsPage = () => {
                       </div>
                     )}
                     
-                    {/* Trip Summary Section */}
-                    <div className="bg-white">
-                      <div className="flex items-center gap-3 mb-6">
-                        <MapPin className="w-5 h-5 text-gray-400" />
-                        <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">Trip Summary</h3>
-                      </div>
-                      
-                      {/* Field Groups */}
-                      <div className="space-y-6">
-                        <div className="grid grid-cols-1 gap-6">
-                          {/* Pickup */}
-                          <div className="grid grid-cols-3 gap-4 items-start">
-                            <label className="text-sm text-gray-500 font-medium">Pickup Location</label>
-                            <div className="col-span-2">
-                              <p className="font-medium text-gray-900">{booking.pickup}</p>
-                              <p className="text-xs text-gray-500 mt-1">Requested {new Date(booking.createdAt).toLocaleTimeString()}</p>
-                            </div>
+                    {/* Map Preview Section */}
+                    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                      <div className="h-64 relative">
+                        {/* Google Maps Embed */}
+                        <iframe
+                          className="w-full h-full"
+                          loading="lazy"
+                          allowFullScreen
+                          referrerPolicy="no-referrer-when-downgrade"
+                          src={`https://www.google.com/maps/embed/v1/directions?key=AIzaSyD5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f&origin=${encodeURIComponent(booking.pickup)}&destination=${encodeURIComponent(booking.destination)}&mode=driving`}
+                        />
+                        {/* Overlay with trip details */}
+                        <div className="absolute top-2 left-2 bg-white bg-opacity-90 backdrop-blur-sm rounded-lg px-3 py-2 shadow-lg">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                            <span className="text-xs font-medium text-gray-700">{booking.pickup}</span>
                           </div>
-                          
-                          {/* Destination */}
-                          <div className="grid grid-cols-3 gap-4 items-start">
-                            <label className="text-sm text-gray-500 font-medium">Destination</label>
-                            <div className="col-span-2">
-                              <p className="font-medium text-gray-900">{booking.destination}</p>
-                              <p className="text-xs text-gray-500 mt-1">Distance: {booking.distance}</p>
-                            </div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                            <span className="text-xs font-medium text-gray-700">{booking.destination}</span>
                           </div>
                         </div>
-                        
-                        <div className="border-t border-gray-100 pt-6">
-                          <div className="space-y-4">
-                            <div className="grid grid-cols-3 gap-4 items-center">
-                              <label className="text-sm text-gray-500 font-medium">Duration</label>
-                              <p className="font-medium text-gray-900 col-span-2">{booking.duration}</p>
-                            </div>
-                            <div className="grid grid-cols-3 gap-4 items-center">
-                              <label className="text-sm text-gray-500 font-medium">Service Type</label>
-                              <p className="font-medium text-gray-900 col-span-2">{getServiceDisplayName(booking.serviceType)}</p>
-                            </div>
-                            <div className="grid grid-cols-3 gap-4 items-center">
-                              <label className="text-sm text-gray-500 font-medium">Total Fare</label>
-                              <p className="font-semibold text-gray-900 text-lg col-span-2">₱{booking.fare}</p>
-                            </div>
+                        {/* Route info overlay */}
+                        <div className="absolute top-2 right-2 bg-blue-500 bg-opacity-90 backdrop-blur-sm rounded-lg px-3 py-2 shadow-lg text-white">
+                          <div className="text-sm font-medium">{booking.distance}</div>
+                          <div className="text-xs opacity-90">{booking.duration}</div>
+                        </div>
+                        {/* Fallback for when maps can't load */}
+                        <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-green-50 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity pointer-events-none">
+                          <div className="text-center">
+                            <MapPin className="w-8 h-8 text-blue-500 mx-auto mb-2" />
+                            <p className="text-sm text-gray-600 font-medium">Loading route...</p>
                           </div>
                         </div>
                       </div>
                     </div>
                     
-                    {/* Passenger Section */}
-                    <div className="bg-white border-t border-gray-100 pt-8">
-                      <div className="flex items-center gap-3 mb-6">
-                        <User className="w-5 h-5 text-gray-400" />
-                        <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">Passenger</h3>
-                      </div>
-                      
-                      {/* Field Groups */}
-                      <div className="space-y-6">
+                    {/* Trip Summary and Passenger Side by Side */}
+                    <div className="grid grid-cols-2 gap-6">
+                      <div className="bg-white">
+                        <div className="flex items-center gap-3 mb-4">
+                          <MapPin className="w-5 h-5 text-gray-400" />
+                          <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">Trip Summary</h3>
+                        </div>
+                        
                         <div className="space-y-4">
-                          <div className="grid grid-cols-3 gap-4 items-center">
-                            <label className="text-sm text-gray-500 font-medium">Name</label>
-                            <p className="font-medium text-gray-900 col-span-2">{booking.details.passenger.name}</p>
+                          {/* Type */}
+                          <div>
+                            <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Type</label>
+                            <p className="font-medium text-gray-900 text-sm mt-0.5">
+                              {(() => {
+                                const rideTypes = ['Regular', 'Scan & Ride', 'Scheduled', 'Concierge'];
+                                const selectedType = rideTypes[Math.floor(Math.random() * rideTypes.length)];
+                                if (selectedType === 'Scheduled') {
+                                  const scheduledTime = new Date(Date.now() + Math.random() * 24 * 60 * 60 * 1000);
+                                  return `${selectedType} (${scheduledTime.toLocaleDateString()} at ${scheduledTime.toLocaleTimeString()})`;
+                                }
+                                return selectedType;
+                              })()}
+                            </p>
                           </div>
                           
-                          <div className="grid grid-cols-3 gap-4 items-center">
-                            <label className="text-sm text-gray-500 font-medium">Phone</label>
-                            <p className="font-medium text-gray-900 col-span-2">{booking.details.passenger.phone}</p>
-                          </div>
-                          
-                          <div className="grid grid-cols-3 gap-4 items-center">
-                            <label className="text-sm text-gray-500 font-medium">Rating</label>
-                            <div className="flex items-center gap-2 col-span-2">
-                              <Star className="w-4 h-4 text-yellow-400 fill-current" />
-                              <span className="font-medium text-gray-900">{booking.details.passenger.rating.toFixed(1)}</span>
+                          {/* Pickup & Destination */}
+                          <div className="grid grid-cols-2 gap-6">
+                            <div>
+                              <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Pickup Location</label>
+                              <p className="font-medium text-gray-900 text-sm mt-0.5">{booking.pickup}</p>
+                              <p className="text-xs text-gray-500">Requested {new Date(booking.createdAt).toLocaleTimeString()}</p>
+                            </div>
+                            <div>
+                              <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Destination</label>
+                              <p className="font-medium text-gray-900 text-sm mt-0.5">{booking.destination}</p>
+                              <p className="text-xs text-gray-500">Distance: {booking.distance}</p>
                             </div>
                           </div>
                           
-                          <div className="grid grid-cols-3 gap-4 items-center">
-                            <label className="text-sm text-gray-500 font-medium">Total Trips</label>
-                            <p className="font-medium text-gray-900 col-span-2">{booking.details.passenger.totalTrips}</p>
+                          {/* Service & Duration */}
+                          <div className="grid grid-cols-2 gap-6">
+                            <div>
+                              <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Service</label>
+                              <p className="font-medium text-gray-900 text-sm mt-0.5">{getServiceDisplayName(booking.serviceType)}</p>
+                            </div>
+                            <div>
+                              <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Duration</label>
+                              <p className="font-medium text-gray-900 text-sm mt-0.5">{booking.duration}</p>
+                            </div>
                           </div>
                           
-                          <div className="grid grid-cols-3 gap-4 items-center">
-                            <label className="text-sm text-gray-500 font-medium">Payment Method</label>
-                            <p className="font-medium text-gray-900 capitalize col-span-2">{booking.details.passenger.paymentMethod.replace('_', ' ')}</p>
+                          {/* Total Fare */}
+                          <div>
+                            <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Total Fare</label>
+                            <p className="font-semibold text-gray-900 text-xl mt-0.5">₱{booking.fare}</p>
                           </div>
                         </div>
+                      </div>
+                      
+                      {/* Passenger Section */}
+                      <div className="bg-white">
+                        <div className="flex items-center gap-3 mb-4">
+                          <User className="w-5 h-5 text-gray-400" />
+                          <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">Passenger</h3>
+                        </div>
                         
-                        <div className="border-t border-gray-100 pt-6">
-                          <div className="flex gap-3">
-                            <button className="bg-[#3B82F6] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#2563EB] transition-colors flex items-center gap-2">
-                              <Phone className="w-4 h-4" />
-                              Call
-                            </button>
-                            <button className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors flex items-center gap-2">
-                              <MessageCircle className="w-4 h-4" />
-                              Message
-                            </button>
+                        <div className="space-y-3">
+                          {/* Name */}
+                          <div>
+                            <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Name</label>
+                            <p className="font-medium text-gray-900 text-sm mt-0.5">{booking.details.passenger.name}</p>
+                          </div>
+                          
+                          {/* Phone & Rating */}
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Phone</label>
+                              <p className="font-medium text-gray-900 text-sm mt-0.5">{booking.details.passenger.phone}</p>
+                            </div>
+                            <div>
+                              <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Rating</label>
+                              <div className="flex items-center gap-1 mt-0.5">
+                                <Star className="w-4 h-4 text-yellow-400 fill-current" />
+                                <span className="font-medium text-gray-900 text-sm">{booking.details.passenger.rating.toFixed(1)}</span>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Total Trips & Payment */}
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Total Trips</label>
+                              <p className="font-medium text-gray-900 text-sm mt-0.5">{booking.details.passenger.totalTrips}</p>
+                            </div>
+                            <div>
+                              <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Payment</label>
+                              <p className="font-medium text-gray-900 capitalize text-sm mt-0.5">{booking.details.passenger.paymentMethod.replace('_', ' ')}</p>
+                            </div>
+                          </div>
+                          
+                          {/* Contact Actions */}
+                          <div className="pt-2">
+                            <div className="flex gap-2">
+                              <button 
+                                disabled={!canContactPassenger(booking)}
+                                onClick={() => canContactPassenger(booking) && handleCallPassenger(booking.details.passenger.phone)}
+                                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                                  canContactPassenger(booking) 
+                                    ? 'bg-[#3B82F6] text-white hover:bg-[#2563EB]' 
+                                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                }`}
+                              >
+                                <Phone className="w-4 h-4" />
+                                Call
+                              </button>
+                              <button 
+                                disabled={!canContactPassenger(booking)}
+                                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 border ${
+                                  canContactPassenger(booking) 
+                                    ? 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50' 
+                                    : 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+                                }`}
+                              >
+                                <MessageCircle className="w-4 h-4" />
+                                Message
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                    
+                  </div>
+                )}
+
+                {activeModalTab === 'driver' && (
+                  <div className="space-y-6">
                     {/* Driver Assignment Section */}
                     <div className="bg-white border-t border-gray-100 pt-8">
                       <div className="flex items-center gap-3 mb-6">
@@ -1951,7 +2589,15 @@ const BookingsPage = () => {
                           )}
                           
                           <div className="flex gap-3 pt-2">
-                            <button className="bg-[#3B82F6] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#2563EB] transition-colors flex items-center gap-2">
+                            <button 
+                              disabled={!canContactDriver(booking)}
+                              onClick={() => canContactDriver(booking) && handleCallDriver(booking.details.driver.phone)}
+                              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                                canContactDriver(booking) 
+                                  ? 'bg-[#3B82F6] text-white hover:bg-[#2563EB]' 
+                                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                              }`}
+                            >
                               <Phone className="w-4 h-4" />
                               Call Driver
                             </button>
@@ -1982,700 +2628,1013 @@ const BookingsPage = () => {
                 )}
                 
                 {activeModalTab === 'timeline' && (
-                  <div className="space-y-8">
-                    {/* Trip Timeline Section */}
+                  <div className="space-y-6">
+                    {/* Enhanced Trip Timeline */}
                     <div className="bg-white">
-                      <div className="flex items-center gap-3 mb-6">
-                        <History className="w-5 h-5 text-gray-400" />
-                        <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">Trip Timeline</h3>
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-3">
+                          <History className="w-5 h-5 text-gray-400" />
+                          <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">Complete Trip Timeline</h3>
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          Total Duration: {(() => {
+                            const timeline = booking.details?.tripTimeline || [];
+                            if (timeline.length < 2) return 'N/A';
+                            const start = timeline[0].timestamp.getTime();
+                            const end = timeline[timeline.length - 1].timestamp.getTime();
+                            const totalMinutes = Math.floor((end - start) / 60000);
+                            return `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`;
+                          })()}
+                        </div>
                       </div>
                       
                       {/* Timeline Events */}
-                      <div className="space-y-6">
-                        <div className="space-y-4">
-                          <div className="flex items-start gap-4">
-                            <div className="flex flex-col items-center">
-                              <div className="w-3 h-3 bg-[#22C55E] rounded-full"></div>
-                              <div className="w-0.5 h-8 bg-gray-200 mt-2"></div>
-                            </div>
-                            <div className="flex-1">
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="font-medium text-gray-900">Ride Requested</span>
-                                <span className="text-sm text-gray-500">{new Date(booking.createdAt).toLocaleTimeString()}</span>
-                              </div>
-                              <p className="text-sm text-gray-600">Passenger requested ride from {booking.pickup}</p>
-                            </div>
-                          </div>
+                      <div className="space-y-4">
+                        {booking.details?.tripTimeline?.map((event, index) => {
+                          const isLast = index === (booking.details?.tripTimeline?.length || 0) - 1;
+                          const isExpandable = event.status === 'assigning';
+                          const isExpanded = expandedTimelineEvents.has(event.id);
+                          const statusColors = {
+                            requested: 'bg-blue-500',
+                            assigning: 'bg-yellow-500', 
+                            assigned: 'bg-green-500',
+                            enroute_pickup: 'bg-purple-500',
+                            arrived_pickup: 'bg-indigo-500',
+                            passenger_pickup: 'bg-cyan-500',
+                            enroute_destination: 'bg-orange-500', 
+                            arrived_destination: 'bg-pink-500',
+                            completed: 'bg-emerald-500',
+                            cancelled: 'bg-red-500'
+                          };
                           
-                          {booking.details?.driver && (
-                            <div className="flex items-start gap-4">
+                          return (
+                            <div key={event.id} className="flex items-start gap-4">
                               <div className="flex flex-col items-center">
-                                <div className="w-3 h-3 bg-[#3B82F6] rounded-full"></div>
-                                <div className="w-0.5 h-8 bg-gray-200 mt-2"></div>
+                                <div className={`w-3 h-3 ${statusColors[event.status]} rounded-full ${!isLast && event.status !== 'completed' && event.status !== 'cancelled' ? 'animate-pulse' : ''}`}></div>
+                                {!isLast && <div className="w-0.5 h-8 bg-gray-200 mt-2"></div>}
                               </div>
-                              <div className="flex-1">
-                                <div className="flex items-center justify-between mb-1">
-                                  <span className="font-medium text-gray-900">Driver Assigned</span>
-                                  <span className="text-sm text-gray-500">{new Date(Date.now() - 120000).toLocaleTimeString()}</span>
+                              <div className="flex-1 min-w-0">
+                                <div className={`${isExpandable ? 'cursor-pointer hover:bg-gray-50 p-2 rounded' : ''}`}
+                                     onClick={() => isExpandable && toggleTimelineEvent(event.id)}>
+                                  <div className="flex items-start justify-between mb-1">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-medium text-gray-900 capitalize">
+                                          {event.description}
+                                        </span>
+                                        {isExpandable && (
+                                          <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                                        )}
+                                      </div>
+                                      {event.duration && (
+                                        <span className="ml-2 text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded">
+                                          +{Math.floor(event.duration / 60000)}m {Math.floor((event.duration % 60000) / 1000)}s
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className="text-sm text-gray-500 ml-4 flex-shrink-0">
+                                      {event.timestamp.toLocaleTimeString()}
+                                    </span>
+                                  </div>
+                                  {event.metadata && (
+                                    <div className="text-xs text-gray-600 mt-1">
+                                      {event.metadata.driverName && `Driver: ${event.metadata.driverName}`}
+                                      {event.metadata.attemptedDrivers && `${event.metadata.attemptedDrivers} drivers contacted`}
+                                      {event.metadata.reason && `Reason: ${event.metadata.reason}`}
+                                      {event.metadata.finalFare && `Final fare: ₱${event.metadata.finalFare}`}
+                                    </div>
+                                  )}
                                 </div>
-                                <p className="text-sm text-gray-600">{booking.details.driver.name} accepted the ride</p>
+                                
+                                {/* Expandable Driver Assignment Details */}
+                                {isExpandable && isExpanded && booking.details?.driverAssignmentHistory && (
+                                  <div className="mt-3 pl-4 border-l-2 border-yellow-200 space-y-2">
+                                    <h4 className="font-medium text-gray-900 text-sm mb-2">Driver Assignment Attempts</h4>
+                                    {booking.details.driverAssignmentHistory.map((attempt, attemptIndex) => (
+                                      <div key={attempt.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                                        <div className="flex items-start justify-between">
+                                          <div className="flex items-center gap-3">
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium ${
+                                              attempt.status === 'accepted' ? 'bg-green-500' :
+                                              attempt.status === 'declined' ? 'bg-red-500' :
+                                              attempt.status === 'timeout' ? 'bg-gray-500' : 'bg-yellow-500'
+                                            }`}>
+                                              {attempt.driverName.split(' ').map(n => n[0]).join('')}
+                                            </div>
+                                            <div className="flex-1">
+                                              <div className="flex items-center gap-3 mb-1">
+                                                <h5 className="font-medium text-gray-900 text-sm">{attempt.driverName}</h5>
+                                                {attempt.kpiImpact && (
+                                                  <div className="flex items-center gap-1.5 text-xs">
+                                                    {attempt.kpiImpact.acceptanceRate && (
+                                                      <span className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-medium">
+                                                        Accept {attempt.kpiImpact.acceptanceRate.toFixed(1)}%
+                                                      </span>
+                                                    )}
+                                                    {attempt.kpiImpact.responseTime && (
+                                                      <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded text-xs font-medium">
+                                                        Response {attempt.kpiImpact.responseTime.toFixed(1)}%
+                                                      </span>
+                                                    )}
+                                                    {attempt.kpiImpact.backToBackOffered && (
+                                                      <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs font-medium">
+                                                        ↗ B2B
+                                                      </span>
+                                                    )}
+                                                  </div>
+                                                )}
+                                              </div>
+                                              <div className="flex items-center justify-between text-xs text-gray-500">
+                                                <div className="flex items-center gap-4">
+                                                  <span>#{attempt.driverId}</span>
+                                                  <span>★{attempt.rating?.toFixed(1)}</span>
+                                                  <span>{attempt.distance?.toFixed(1)}km</span>
+                                                </div>
+                                                <div className="flex items-center gap-6">
+                                                  <span>Offered: {attempt.offeredAt.toLocaleTimeString()}</span>
+                                                  <span>Response: {attempt.responseTime}s</span>
+                                                  <span>Result: {attempt.declineReason || attempt.status}</span>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </div>
+                                          <div className="ml-3">
+                                            <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${
+                                              attempt.status === 'accepted' ? 'bg-green-100 text-green-800' :
+                                              attempt.status === 'declined' ? 'bg-red-100 text-red-800' :
+                                              attempt.status === 'timeout' ? 'bg-gray-100 text-gray-800' : 'bg-yellow-100 text-yellow-800'
+                                            }`}>
+                                              {attempt.status.charAt(0).toUpperCase() + attempt.status.slice(1)}
+                                            </span>
+                                          </div>
+                                        </div>
+
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                             </div>
-                          )}
+                          );
+                        }) || (
+                          <div className="text-center py-8 text-gray-500">
+                            <History className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                            <p>No timeline data available</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {activeModalTab === 'communication' && (
+                  <div className="space-y-6">
+                    {/* Communication History */}
+                    <div className="bg-white">
+                      <div className="flex items-center gap-3 mb-6">
+                        <MessageCircle className="w-5 h-5 text-gray-400" />
+                        <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">Communication History</h3>
+                      </div>
+                      
+                      <div className="space-y-4">
+                        {booking.details?.communicationHistory?.map((comm) => {
+                          // RBAC Check for private communications
+                          const canViewPrivate = hasPermission('contact_passenger_unmasked') || hasPermission('contact_driver_unmasked');
                           
-                          <div className="flex items-start gap-4">
-                            <div className="flex flex-col items-center">
-                              <div className="w-3 h-3 bg-[#F59E0B] rounded-full animate-pulse"></div>
-                            </div>
-                            <div className="flex-1">
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="font-medium text-gray-900">Current Status</span>
-                                <span className="text-sm text-gray-500">Now</span>
+                          if (comm.isPrivate && !canViewPrivate) {
+                            return (
+                              <div key={comm.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                                <div className="flex items-center gap-3 text-gray-500">
+                                  <Shield className="w-4 h-4" />
+                                  <span className="text-sm font-medium">Private communication - Access restricted</span>
+                                  <span className="text-xs">{comm.timestamp.toLocaleTimeString()}</span>
+                                </div>
                               </div>
-                              <p className="text-sm text-gray-600">{booking.status === 'Active' ? 'Driver en route to pickup location' : booking.status}</p>
+                            );
+                          }
+                          
+                          return (
+                            <div key={comm.id} className="border border-gray-200 rounded-lg p-4">
+                              <div className="flex items-start gap-3">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                                  comm.type === 'call' ? 'bg-blue-100 text-blue-600' :
+                                  comm.type === 'message' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'
+                                }`}>
+                                  {comm.type === 'call' ? <Phone className="w-4 h-4" /> :
+                                   comm.type === 'message' ? <MessageCircle className="w-4 h-4" /> : <Settings className="w-4 h-4" />}
+                                </div>
+                                <div className="flex-1">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="font-medium text-gray-900">
+                                      {comm.direction.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                    </span>
+                                    <span className="text-sm text-gray-500">{comm.timestamp.toLocaleTimeString()}</span>
+                                  </div>
+                                  
+                                  {comm.content && (
+                                    <p className="text-sm text-gray-700 mb-2">{comm.content}</p>
+                                  )}
+                                  
+                                  <div className="flex items-center gap-4 text-xs text-gray-500">
+                                    <span className="capitalize">{comm.type}</span>
+                                    {comm.duration && <span>{comm.duration}s duration</span>}
+                                    <span className={`px-2 py-1 rounded ${
+                                      comm.status === 'delivered' ? 'bg-green-100 text-green-700' :
+                                      comm.status === 'read' ? 'bg-blue-100 text-blue-700' :
+                                      comm.status === 'failed' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'
+                                    }`}>
+                                      {comm.status}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
                             </div>
+                          );
+                        }) || (
+                          <div className="text-center py-8 text-gray-500">
+                            <MessageCircle className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                            <p>No communication history available</p>
                           </div>
-                        </div>
-                        
-                        <div className="border-t border-gray-100 pt-4">
-                          <div className="grid grid-cols-2 gap-6">
-                            <div className="space-y-1">
-                              <label className="text-sm text-gray-500">Request Time</label>
-                              <p className="font-medium text-gray-900">{new Date(booking.createdAt).toLocaleString()}</p>
-                            </div>
-                            
-                            <div className="space-y-1">
-                              <label className="text-sm text-gray-500">Estimated Duration</label>
-                              <p className="font-medium text-gray-900">{booking.duration}</p>
-                            </div>
-                          </div>
-                        </div>
+                        )}
                       </div>
                     </div>
                   </div>
                 )}
                 
                 {activeModalTab === 'financials' && (
-                  <div className="space-y-8">
-                    {/* Fare Breakdown */}
-                    <div className="bg-white">
-                      <div className="flex items-center gap-3 mb-6">
-                        <CreditCard className="w-5 h-5 text-gray-400" />
-                        <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">Fare Breakdown</h3>
-                      </div>
-                        
-                      <div className="space-y-6">
-                        <div className="space-y-4">
-                          <div className="grid grid-cols-3 gap-4 items-center">
-                            <label className="text-sm text-gray-500 font-medium">Base Fare</label>
-                            <p className="font-medium text-gray-900 col-span-2">₱{booking.details.fareBreakdown.baseFare.toFixed(2)}</p>
-                          </div>
-                          
-                          <div className="grid grid-cols-3 gap-4 items-center">
-                            <label className="text-sm text-gray-500 font-medium">Distance Fee ({booking.distance})</label>
-                            <p className="font-medium text-gray-900 col-span-2">₱{booking.details.fareBreakdown.distanceFare.toFixed(2)}</p>
-                          </div>
-                          
-                          <div className="grid grid-cols-3 gap-4 items-center">
-                            <label className="text-sm text-gray-500 font-medium">Service Fees</label>
-                            <p className="font-medium text-gray-900 col-span-2">₱{booking.details.fareBreakdown.fees.toFixed(2)}</p>
-                          </div>
-                          
-                          {booking.details.fareBreakdown.surgeFare > 0 && (
-                            <div className="grid grid-cols-3 gap-4 items-center">
-                              <label className="text-sm text-gray-500 font-medium">Surge Multiplier (1.5x)</label>
-                              <p className="font-medium text-[#EF4444] col-span-2">₱{booking.details.fareBreakdown.surgeFare.toFixed(2)}</p>
-                            </div>
-                          )}
-                          
-                          {booking.details.fareBreakdown.discount > 0 && (
-                            <div className="grid grid-cols-3 gap-4 items-center">
-                              <label className="text-sm text-gray-500 font-medium">Discount Applied</label>
-                              <p className="font-medium text-[#22C55E] col-span-2">-₱{booking.details.fareBreakdown.discount.toFixed(2)}</p>
-                            </div>
-                          )}
+                  <div className="space-y-6">
+                    {/* Two Column Layout */}
+                    <div className="grid grid-cols-2 gap-6">
+                      {/* Fare Breakdown */}
+                      <div className="bg-white">
+                        <div className="flex items-center gap-3 mb-4">
+                          <CreditCard className="w-5 h-5 text-gray-400" />
+                          <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">Fare Breakdown</h3>
                         </div>
                         
-                        <div className="border-t border-gray-100 pt-6">
-                          <div className="space-y-4">
-                            <div className="grid grid-cols-3 gap-4 items-center">
-                              <label className="text-sm text-gray-500 font-medium">Payment Method</label>
-                              <p className="font-medium text-gray-900 capitalize col-span-2">
-                                {booking.details.passenger.paymentMethod.replace('_', ' ')}
-                              </p>
-                            </div>
+                        <div className="space-y-2">
+                          {(() => {
+                            // Single service type selection for consistency
+                            const serviceTypes = ['Taxi', 'Premium Taxi', 'MC Taxi', 'TNVS 4-Seat', 'TNVS 6-Seat', 'TNVS Premium'];
+                            const selectedService = serviceTypes[Math.floor(Math.random() * serviceTypes.length)];
                             
-                            <div className="grid grid-cols-3 gap-4 items-center">
-                              <label className="text-sm text-gray-500 font-medium">Total Fare</label>
-                              <p className="font-semibold text-gray-900 text-lg col-span-2">₱{booking.details.fareBreakdown.total.toFixed(2)}</p>
-                            </div>
-                          </div>
+                            // LTFRB Fare Matrix Rates (Updated 2024-2025)
+                            const fareMatrix = {
+                              'Taxi': { base: 50, timeRate: 2.50, distanceRate: 13.50, bookingFee: 69 },
+                              'Premium Taxi': { base: 70, timeRate: 3.00, distanceRate: 15.00, bookingFee: 89 },
+                              'MC Taxi': { 
+                                base: 50, // First 2km = ₱50
+                                timeRate: 2.00, 
+                                distanceRate: 10.00, // 3-7km = ₱10/km, 7km+ = ₱15/km (simplified average)
+                                bookingFee: 0,
+                                surgeCapable: true,
+                                specialRates: {
+                                  first2km: 50,
+                                  km3to7: 10,
+                                  beyond7km: 15
+                                }
+                              },
+                              'TNVS 4-Seat': { base: 35, timeRate: 2.00, distanceRate: 13.00, bookingFee: 10, surgeCapable: true },
+                              'TNVS 6-Seat': { base: 55, timeRate: 2.00, distanceRate: 18.00, bookingFee: 10, surgeCapable: true },
+                              'TNVS Premium': { base: 80, timeRate: 3.50, distanceRate: 20.00, bookingFee: 15, surgeCapable: true }
+                            };
+                            
+                            const rates = fareMatrix[selectedService];
+                            const distance = parseFloat(booking.distance.replace('km', ''));
+                            const duration = Math.floor(Math.random() * 25) + 15; // 15-40 minutes
+                            const baseFare = rates.base;
+                            const timeFare = rates.timeRate * duration;
+                            
+                            // Special MC Taxi distance calculation
+                            let distanceFare = 0;
+                            if (selectedService === 'MC Taxi' && rates.specialRates) {
+                              if (distance <= 2) {
+                                distanceFare = 0; // Included in base fare
+                              } else if (distance <= 7) {
+                                distanceFare = (distance - 2) * rates.specialRates.km3to7;
+                              } else {
+                                distanceFare = (5 * rates.specialRates.km3to7) + ((distance - 7) * rates.specialRates.beyond7km);
+                              }
+                            } else {
+                              distanceFare = rates.distanceRate * distance;
+                            }
+                            
+                            const bookingFee = rates.bookingFee || 0;
+                            const surgeFare = rates.surgeCapable && Math.random() > 0.7 ? (baseFare + timeFare + distanceFare) * 0.5 : 0;
+                            const driverTip = Math.random() > 0.5 ? Math.floor(Math.random() * 50) + 10 : 0;
+                            const discount = booking.details.fareBreakdown.discount || 0;
+                            const total = baseFare + timeFare + distanceFare + bookingFee + surgeFare + driverTip - discount;
+                            
+                            return (
+                              <>
+                                {/* Service Type Indicator */}
+                                <div className="bg-gray-50 px-3 py-2 rounded-lg mb-3">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-sm font-medium text-gray-900">{selectedService}</span>
+                                    <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded">LTFRB Regulated</span>
+                                  </div>
+                                </div>
+
+                                {/* Base Fare */}
+                                <div className="flex justify-between items-center py-0.5">
+                                  <label className="text-sm text-gray-500 font-medium">Base Fare</label>
+                                  <p className="font-medium text-gray-900">₱{baseFare.toFixed(2)}</p>
+                                </div>
+                                
+                                {/* Time Rate */}
+                                <div className="flex justify-between items-center py-0.5">
+                                  <label className="text-sm text-gray-500 font-medium">Time ({duration} mins × ₱{rates.timeRate.toFixed(2)})</label>
+                                  <p className="font-medium text-gray-900">₱{timeFare.toFixed(2)}</p>
+                                </div>
+                                
+                                {/* Distance Rate */}
+                                <div className="flex justify-between items-center py-0.5">
+                                  <label className="text-sm text-gray-500 font-medium">
+                                    {selectedService === 'MC Taxi' ? (
+                                      distance <= 2 ? `Distance (${distance.toFixed(1)}km included in base)` :
+                                      distance <= 7 ? `Distance (${(distance - 2).toFixed(1)}km × ₱10)` :
+                                      `Distance (5km × ₱10 + ${(distance - 7).toFixed(1)}km × ₱15)`
+                                    ) : (
+                                      `Distance (${distance.toFixed(1)}km × ₱${rates.distanceRate.toFixed(2)})`
+                                    )}
+                                  </label>
+                                  <p className="font-medium text-gray-900">₱{distanceFare.toFixed(2)}</p>
+                                </div>
+                                
+                                {/* Surge for TNVS and MC Taxi */}
+                                {rates.surgeCapable && surgeFare > 0 && (
+                                  <div className="flex justify-between items-center py-0.5">
+                                    <label className="text-sm text-gray-500 font-medium">
+                                      Surge (1.5x {selectedService === 'MC Taxi' ? 'high demand' : 'peak hours'})
+                                    </label>
+                                    <p className="font-medium text-red-600">₱{surgeFare.toFixed(2)}</p>
+                                  </div>
+                                )}
+                                
+                                <hr className="my-1.5" />
+                                <p className="text-xs text-gray-400 mb-1.5">Additional Fees</p>
+                                
+                                {/* Booking Fee - Not for MC Taxi */}
+                                {bookingFee > 0 && (
+                                  <div className="flex justify-between items-center py-0.5">
+                                    <label className="text-sm text-gray-500 font-medium">Booking Fee</label>
+                                    <p className="font-medium text-gray-900">₱{bookingFee.toFixed(2)}</p>
+                                  </div>
+                                )}
+                                
+                                {/* Driver Tip - All service types */}
+                                {driverTip > 0 && (
+                                  <div className="flex justify-between items-center py-0.5">
+                                    <label className="text-sm text-gray-500 font-medium">Driver Tip</label>
+                                    <p className="font-medium text-green-600">₱{driverTip.toFixed(2)}</p>
+                                  </div>
+                                )}
+                                
+                                {/* Senior/PWD/Student Discount */}
+                                {discount > 0 && (
+                                  <div className="flex justify-between items-center py-0.5">
+                                    <label className="text-sm text-gray-500 font-medium">Senior/PWD/Student (20%)</label>
+                                    <p className="font-medium text-green-600">-₱{discount.toFixed(2)}</p>
+                                  </div>
+                                )}
+
+                                <hr className="my-2" />
+                                
+                                <div className="flex justify-between items-center py-1">
+                                  <label className="text-sm text-gray-500 font-medium">Payment Method</label>
+                                  <p className="font-medium text-gray-900 capitalize text-sm">
+                                    {booking.details.passenger.paymentMethod.replace('_', ' ')}
+                                  </p>
+                                </div>
+                                
+                                <div className="flex justify-between items-center py-2 bg-gray-50 px-3 rounded-lg mt-2">
+                                  <label className="text-base font-semibold text-gray-900">Total Fare</label>
+                                  <p className="font-bold text-gray-900 text-xl">₱{total.toFixed(2)}</p>
+                                </div>
+                              </>
+                            );
+                          })()}
                         </div>
                       </div>
-                    </div>
                       
-                    {/* Promotions & Incentives */}
-                    {booking.details.fareBreakdown.promotions && (
-                      <div className="bg-white border-t border-gray-100 pt-8">
-                        <div className="flex items-center gap-3 mb-6">
+                      {/* Promotions & Cost of Sale */}
+                      <div className="bg-white">
+                        <div className="flex items-center gap-3 mb-4">
                           <Gift className="w-5 h-5 text-gray-400" />
                           <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">Promotions & Incentives</h3>
                         </div>
                         
-                        <div className="space-y-6">
-                          {booking.details.fareBreakdown.promotions.passengerPromo && (
-                            <div className="space-y-4">
-                              <div className="space-y-1">
-                                <label className="text-sm text-gray-500">Passenger Promo Code</label>
-                                <div className="flex items-center gap-3">
-                                  <p className="font-medium text-gray-900">{booking.details.fareBreakdown.promotions.passengerPromo.code}</p>
-                                  <span className="px-2 py-1 bg-[#FFF7ED] text-[#D97706] text-xs font-medium rounded">
-                                    Active
-                                  </span>
+                        <div className="space-y-4">
+                          {/* Applied Promotions & Incentives Only */}
+                          {(() => {
+                            // Only show promotions/incentives that are actually applied to this ride
+                            const hasAppliedPromos = Math.random() > 0.6; // 40% chance of having actual applied promotions
+                            
+                            if (hasAppliedPromos) {
+                              const appliedPassengerPromo = Math.random() > 0.5 ? {
+                                code: ['FIRST20', 'WEEKDAY15', 'STUDENT10', 'CASHBACK25', 'LOYAL50'][Math.floor(Math.random() * 5)],
+                                type: 'Applied Discount',
+                                value: Math.floor(Math.random() * 40) + 10,
+                                status: 'applied',
+                                description: 'Discount applied to this ride'
+                              } : null;
+                              
+                              const appliedDriverIncentive = Math.random() > 0.7 ? {
+                                type: ['Peak Hour Bonus', 'Consecutive Rides', 'High Rating Bonus', 'Distance Challenge'][Math.floor(Math.random() * 4)],
+                                value: Math.floor(Math.random() * 30) + 15,
+                                description: 'Incentive earned for this ride'
+                              } : null;
+                              
+                              if (!appliedPassengerPromo && !appliedDriverIncentive) {
+                                return (
+                                  <div className="text-center py-6 text-gray-500">
+                                    <Gift className="w-6 h-6 mx-auto mb-2 opacity-40" />
+                                    <p className="text-sm">No active promotions or incentives achieved</p>
+                                  </div>
+                                );
+                              }
+                              
+                              return (
+                                <div className="space-y-3">
+                                  {appliedPassengerPromo && (
+                                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                                      <label className="text-xs text-orange-600 font-medium uppercase tracking-wide">Applied Promotion</label>
+                                      <div className="flex items-center justify-between mt-2">
+                                        <div className="flex items-center gap-2">
+                                          <p className="font-semibold text-gray-900 text-sm">{appliedPassengerPromo.code}</p>
+                                          <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-medium rounded">Applied</span>
+                                        </div>
+                                        <p className="font-bold text-orange-600 text-sm">-₱{appliedPassengerPromo.value.toFixed(2)}</p>
+                                      </div>
+                                      <p className="text-xs text-gray-600 mt-1">{appliedPassengerPromo.description}</p>
+                                    </div>
+                                  )}
+                                  
+                                  {appliedDriverIncentive && (
+                                    <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                                      <label className="text-xs text-green-600 font-medium uppercase tracking-wide">Driver Incentive Earned</label>
+                                      <div className="flex items-center justify-between mt-2">
+                                        <div>
+                                          <p className="font-semibold text-gray-900 text-sm">{appliedDriverIncentive.type}</p>
+                                          <p className="text-xs text-gray-600 mt-1">{appliedDriverIncentive.description}</p>
+                                        </div>
+                                        <p className="font-bold text-green-600 text-sm">+₱{appliedDriverIncentive.value.toFixed(2)}</p>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            } else {
+                              return (
+                                <div className="text-center py-6 text-gray-500">
+                                  <Gift className="w-6 h-6 mx-auto mb-2 opacity-40" />
+                                  <p className="text-sm">No active promotions or incentives achieved</p>
+                                </div>
+                              );
+                            }
+                          })()}
+                          
+                          {/* Cost of Sale */}
+                          <div className="border-t pt-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <div className="w-4 h-4 bg-gray-600 rounded-full flex items-center justify-center">
+                                <span className="text-white text-xs font-bold">₱</span>
+                              </div>
+                              <h4 className="font-medium text-gray-900">Cost of Sale</h4>
+                              {hasFinanceAccess() && (
+                                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">Finance Only</span>
+                              )}
+                            </div>
+                            
+                            {hasFinanceAccess() ? (
+                              <div className="space-y-2">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-gray-500">Driver Earnings (75%)</span>
+                                  <span className="font-medium text-gray-900">₱{(booking.details.fareBreakdown.total * 0.75).toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-gray-500">Platform Fee (15%)</span>
+                                  <span className="font-medium text-gray-900">₱{(booking.details.fareBreakdown.total * 0.15).toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-gray-500">Processing Fee (10%)</span>
+                                  <span className="font-medium text-gray-900">₱{(booking.details.fareBreakdown.total * 0.10).toFixed(2)}</span>
                                 </div>
                               </div>
-                              
-                              <div className="space-y-1">
-                                <label className="text-sm text-gray-500">Discount Amount</label>
-                                <p className="font-medium text-gray-900">
-                                  {booking.details.fareBreakdown.promotions.passengerPromo.type === 'percentage' 
-                                    ? `${booking.details.fareBreakdown.promotions.passengerPromo.discount}% off` 
-                                    : `₱${booking.details.fareBreakdown.promotions.passengerPromo.discount} off`
-                                  }
-                                </p>
+                            ) : (
+                              <div className="text-center py-4 text-gray-400 text-sm">
+                                <span>Finance access required</span>
                               </div>
-                            </div>
-                          )}
-                          
-                          {booking.details.fareBreakdown.promotions.driverIncentive && (
-                            <div className="space-y-4 border-t border-gray-100 pt-4">
-                              <div className="space-y-1">
-                                <label className="text-sm text-gray-500">Driver Incentive</label>
-                                <p className="font-medium text-gray-900 capitalize">
-                                  {booking.details.fareBreakdown.promotions.driverIncentive.type.replace('_', ' ')}
-                                </p>
-                              </div>
-                              
-                              <div className="space-y-1">
-                                <label className="text-sm text-gray-500">Bonus Amount</label>
-                                <p className="font-medium text-gray-900">
-                                  ₱{booking.details.fareBreakdown.promotions.driverIncentive.amount.toFixed(2)}
-                                </p>
-                                <p className="text-xs text-gray-600">
-                                  {booking.details.fareBreakdown.promotions.driverIncentive.description}
-                                </p>
-                              </div>
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </div>
                       </div>
-                    )}
-                    
-                    {/* Cost of Sale - RBAC Controlled */}
-                    {hasFinanceAccess() && booking.details.fareBreakdown.costOfSale && (
-                      <div className="bg-white border-t border-gray-100 pt-8">
-                        <div className="flex items-center justify-between mb-6">
-                          <div className="flex items-center gap-3">
-                            <TrendingDown className="w-5 h-5 text-gray-400" />
-                            <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">Cost of Sale</h3>
-                          </div>
-                          <span className="px-3 py-1 bg-[#FEF2F2] text-[#DC2626] text-xs font-medium rounded-full flex items-center gap-1">
-                            <Shield className="w-3 h-3" />
-                            Finance Only
-                          </span>
-                        </div>
-                        <div className="space-y-6">
-                          <div className="grid grid-cols-2 gap-6">
-                            <div className="space-y-1">
-                              <label className="text-sm text-gray-500">Driver Earnings (75%)</label>
-                              <p className="font-medium text-gray-900">₱{booking.details.fareBreakdown.costOfSale.driverEarnings.toFixed(2)}</p>
-                            </div>
-                            
-                            <div className="space-y-1">
-                              <label className="text-sm text-gray-500">Platform Fee (15%)</label>
-                              <p className="font-medium text-gray-900">₱{booking.details.fareBreakdown.costOfSale.platformFee.toFixed(2)}</p>
-                            </div>
-                          </div>
-                          
-                          <div className="grid grid-cols-2 gap-6">
-                            <div className="space-y-1">
-                              <label className="text-sm text-gray-500">Operating Costs (8%)</label>
-                              <p className="font-medium text-gray-900">₱{booking.details.fareBreakdown.costOfSale.operatingCosts.toFixed(2)}</p>
-                            </div>
-                            
-                            <div className="space-y-1">
-                              <label className="text-sm text-gray-500">Commission Rate</label>
-                              <p className="font-medium text-gray-900">{booking.details.fareBreakdown.costOfSale.commissionRate}%</p>
-                            </div>
-                          </div>
-                          
-                          <div className="border-t border-gray-100 pt-4">
-                            <div className="grid grid-cols-2 gap-6">
-                              <div className="space-y-1">
-                                <label className="text-sm text-gray-500">Net Revenue</label>
-                                <p className={`font-semibold text-lg ${booking.details.fareBreakdown.costOfSale.netRevenue > 0 ? 'text-gray-900' : 'text-[#EF4444]'}`}>
-                                  ₱{booking.details.fareBreakdown.costOfSale.netRevenue.toFixed(2)}
-                                </p>
-                              </div>
-                              
-                              <div className="space-y-1">
-                                <label className="text-sm text-gray-500">Profit Margin</label>
-                                <p className={`font-semibold text-lg ${booking.details.fareBreakdown.costOfSale.profitMargin > 0 ? 'text-gray-900' : 'text-[#EF4444]'}`}>
-                                  {booking.details.fareBreakdown.costOfSale.profitMargin.toFixed(1)}%
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        </div>
-                      )}
-                      
-                    {!hasFinanceAccess() && (
-                      <div className="bg-white border-t border-gray-100 pt-8">
-                        <div className="flex items-center gap-3 mb-6">
-                          <Shield className="w-5 h-5 text-gray-400" />
-                          <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">Cost of Sale</h3>
-                        </div>
-                        
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-3">
-                            <span className="px-3 py-1 bg-[#F3F4F6] text-[#6B7280] rounded-full text-sm font-medium">
-                              Restricted
-                            </span>
-                            <span className="text-sm text-gray-600">Finance team access required</span>
-                          </div>
-                          
-                          <p className="text-sm text-gray-500">
-                            Current role: <span className="font-medium">{userRole}</span> • Contact finance team for access
-                          </p>
-                        </div>
-                      </div>
-                    )}
+                    </div>
                   </div>
                 )}
                 
                 {activeModalTab === 'passenger' && (
-                  <div className="space-y-8">
-                    {/* Passenger Information */}
-                    <div className="bg-white">
-                      <div className="flex items-center gap-3 mb-6">
-                        <User className="w-5 h-5 text-gray-400" />
-                        <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">Passenger Information</h3>
-                      </div>
-                      
-                      <div className="space-y-6">
-                        <div className="space-y-4">
-                          <div className="grid grid-cols-3 gap-4 items-center">
-                            <label className="text-sm text-gray-500 font-medium">Full Name</label>
-                            <p className="font-medium text-gray-900 col-span-2">{booking.details.passenger.name}</p>
+                  <div className="space-y-4">
+                    {/* Two Column Layout */}
+                    <div className="grid grid-cols-2 gap-6">
+                      {/* Passenger Profile */}
+                      <div className="bg-white">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                            <User className="w-5 h-5 text-gray-400" />
+                            <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">Passenger Profile</h3>
                           </div>
-                          
-                          <div className="grid grid-cols-3 gap-4 items-center">
-                            <label className="text-sm text-gray-500 font-medium">Phone Number</label>
-                            <p className="font-medium text-gray-900 col-span-2">{booking.details.passenger.phone}</p>
-                          </div>
-                          
-                          <div className="grid grid-cols-3 gap-4 items-center">
-                            <label className="text-sm text-gray-500 font-medium">Rating</label>
-                            <div className="flex items-center gap-2 col-span-2">
-                              <Star className="w-4 h-4 text-yellow-400 fill-current" />
-                              <span className="font-medium text-gray-900">{booking.details.passenger.rating.toFixed(1)}</span>
-                            </div>
-                          </div>
-                          
-                          <div className="grid grid-cols-3 gap-4 items-center">
-                            <label className="text-sm text-gray-500 font-medium">Total Trips</label>
-                            <p className="font-medium text-gray-900 col-span-2">{booking.details.passenger.totalTrips}</p>
-                          </div>
-                          
-                          <div className="grid grid-cols-3 gap-4 items-center">
-                            <label className="text-sm text-gray-500 font-medium">Payment Method</label>
-                            <p className="font-medium text-gray-900 capitalize col-span-2">{booking.details.passenger.paymentMethod.replace('_', ' ')}</p>
+                          {/* Profile Picture */}
+                          <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                            {booking.details.passenger.name.split(' ').map(n => n[0]).join('').toUpperCase()}
                           </div>
                         </div>
-                      </div>
-                    </div>
-                    
-                    {/* Special Requests */}
-                    <div className="bg-white border-t border-gray-100 pt-8">
-                      <div className="flex items-center gap-3 mb-6">
-                        <MessageCircle className="w-5 h-5 text-gray-400" />
-                        <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">Special Requests</h3>
-                      </div>
-                      
-                      <div className="space-y-4">
-                        {booking.details.passenger.specialRequests && booking.details.passenger.specialRequests.length > 0 ? (
-                          booking.details.passenger.specialRequests.map((request, index) => (
-                            <div key={index} className="p-3 bg-gray-50 rounded-lg">
-                              <p className="text-sm text-gray-700">{request}</p>
+                        
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center py-0.5">
+                            <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Full Name</label>
+                            <p className="font-medium text-gray-900 text-sm">{booking.details.passenger.name}</p>
+                          </div>
+                          
+                          <div className="flex justify-between items-center py-0.5">
+                            <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Contact</label>
+                            <p className="font-medium text-gray-900 text-sm font-mono">{booking.details.passenger.phone}</p>
+                          </div>
+                          
+                          <div className="flex justify-between items-center py-0.5">
+                            <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Device</label>
+                            <div className="flex items-center gap-1">
+                              {(() => {
+                                const isIOS = Math.random() > 0.5;
+                                return (
+                                  <>
+                                    <div className={`w-2 h-2 rounded-full ${isIOS ? 'bg-gray-600' : 'bg-green-500'}`}></div>
+                                    <span className="font-medium text-gray-900 text-sm">{isIOS ? 'iOS' : 'Android'}</span>
+                                  </>
+                                );
+                              })()}
                             </div>
-                          ))
-                        ) : (
-                          <p className="text-sm text-gray-500">No special requests for this trip</p>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* Contact Actions */}
-                    <div className="bg-white border-t border-gray-100 pt-8">
-                      <div className="flex items-center gap-3 mb-6">
-                        <Phone className="w-5 h-5 text-gray-400" />
-                        <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">Contact Actions</h3>
+                          </div>
+                          
+                          <div className="flex justify-between items-center py-0.5">
+                            <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Payment</label>
+                            <div className="flex items-center gap-2">
+                              <div className={`w-2 h-2 rounded-full ${
+                                booking.details.passenger.paymentMethod === 'cash' ? 'bg-green-500' :
+                                booking.details.passenger.paymentMethod === 'card' ? 'bg-blue-500' :
+                                booking.details.passenger.paymentMethod === 'digital_wallet' ? 'bg-purple-500' : 'bg-gray-500'
+                              }`}></div>
+                              <span className="font-medium text-gray-900 text-sm capitalize">{booking.details.passenger.paymentMethod.replace('_', ' ')}</span>
+                            </div>
+                          </div>
+                          
+                          <hr className="my-1.5" />
+                          
+                          <div className="flex justify-between items-center py-0.5">
+                            <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Total Trips</label>
+                            <p className="font-medium text-gray-900 text-sm">{booking.details.passenger.totalTrips}</p>
+                          </div>
+                          
+                          <div className="flex justify-between items-center py-0.5">
+                            <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Rating</label>
+                            <div className="flex items-center gap-1">
+                              <Star className="w-3 h-3 text-yellow-400 fill-current" />
+                              <span className="font-medium text-gray-900 text-sm">{booking.details.passenger.rating.toFixed(1)}</span>
+                            </div>
+                          </div>
+                          
+                          <div className="flex justify-between items-center py-0.5">
+                            <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">LTV</label>
+                            <p className="font-medium text-gray-900 text-sm">
+                              ₱{(() => {
+                                const ltv = Math.floor(Math.random() * 15000) + 2500; // ₱2,500-17,500 range
+                                return ltv.toLocaleString();
+                              })()}
+                            </p>
+                          </div>
+                          
+                          <div className="flex justify-between items-center py-0.5">
+                            <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Fraud Rating</label>
+                            <div className="flex items-center gap-1">
+                              {(() => {
+                                const fraudScore = Math.random();
+                                const ratingColor = fraudScore > 0.8 ? 'text-red-600' : fraudScore > 0.4 ? 'text-yellow-600' : 'text-green-600';
+                                const ratingBg = fraudScore > 0.8 ? 'bg-red-100' : fraudScore > 0.4 ? 'bg-yellow-100' : 'bg-green-100';
+                                const ratingText = fraudScore > 0.8 ? 'High Risk' : fraudScore > 0.4 ? 'Medium' : 'Low Risk';
+                                
+                                return (
+                                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${ratingColor} ${ratingBg}`}>
+                                    {ratingText}
+                                  </span>
+                                );
+                              })()}
+                            </div>
+                          </div>
+                          
+                          <div className="flex justify-between items-center py-0.5">
+                            <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Referral</label>
+                            <div className="text-right">
+                              {(() => {
+                                const hasReferrer = Math.random() > 0.6; // 40% chance of being referred
+                                if (hasReferrer) {
+                                  const referrerNames = ['Maria Santos', 'Jose Cruz', 'Ana Reyes', 'Carlos Dela Cruz', 'Rosa Lopez'];
+                                  const referrer = referrerNames[Math.floor(Math.random() * referrerNames.length)];
+                                  return (
+                                    <div>
+                                      <p className="font-medium text-green-700 text-sm">Referred</p>
+                                      <p className="text-xs text-gray-500">by {referrer}</p>
+                                    </div>
+                                  );
+                                } else {
+                                  return <p className="font-medium text-gray-500 text-sm">Direct Sign-up</p>;
+                                }
+                              })()}
+                            </div>
+                          </div>
+                          
+                          <div className="flex justify-between items-center py-0.5">
+                            <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Signup Date</label>
+                            <p className="font-medium text-gray-900 text-sm">
+                              {(() => {
+                                // Generate realistic signup date (6 months to 3 years ago)
+                                const daysAgo = Math.floor(Math.random() * (365 * 3 - 180)) + 180; // 180 days to 3 years
+                                const signupDate = new Date();
+                                signupDate.setDate(signupDate.getDate() - daysAgo);
+                                return signupDate.toLocaleDateString('en-US', { 
+                                  year: 'numeric', 
+                                  month: 'short', 
+                                  day: 'numeric' 
+                                });
+                              })()}
+                            </p>
+                          </div>
+                          
+                          <div className="flex justify-between items-center py-0.5">
+                            <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Status</label>
+                            <div className="flex items-center gap-1">
+                              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                              <span className="text-sm font-medium text-green-700">Active</span>
+                            </div>
+                          </div>
+                          
+                          {hasCustomerProfileAccess() && (
+                            <div className="text-center pt-2 border-t border-gray-100 mt-3">
+                              <button className="text-xs text-blue-600 hover:text-blue-800 font-medium py-1">
+                                View Full Profile →
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                       
-                      <div className="flex gap-3">
-                        <button className="bg-[#3B82F6] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#2563EB] transition-colors flex items-center gap-2">
-                          <Phone className="w-4 h-4" />
-                          Call Passenger
-                        </button>
-                        <button className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors flex items-center gap-2">
-                          <MessageCircle className="w-4 h-4" />
-                          Send Message
-                        </button>
+                      {/* Recent Trip History */}
+                      <div className="bg-white">
+                        <div className="flex items-center gap-3 mb-4">
+                          <Clock className="w-5 h-5 text-gray-400" />
+                          <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">Recent Trip History</h3>
+                        </div>
+                        
+                        <div className="space-y-1.5">
+                          {(() => {
+                            // Generate 5 recent trips - compact layout
+                            const trips = [];
+                            const locations = [
+                              'SM MOA', 'Ayala Triangle', 'BGC Central', 'Makati CBD', 'Ortigas',
+                              'QC Hall', 'UP Diliman', 'NAIA T3', 'Greenhills', 'Eastwood'
+                            ];
+                            const statuses = ['completed', 'completed', 'completed', 'cancelled', 'completed'];
+                            const promos = ['FIRST20', 'WEEKDAY15', 'STUDENT10', '', 'CASHBACK25', ''];
+                            
+                            for (let i = 0; i < 5; i++) {
+                              const daysAgo = i + 1;
+                              const date = new Date();
+                              date.setDate(date.getDate() - daysAgo);
+                              
+                              const fare = Math.floor(Math.random() * 300) + 80;
+                              const status = statuses[Math.floor(Math.random() * statuses.length)];
+                              const promo = Math.random() > 0.6 ? promos[Math.floor(Math.random() * promos.length)] : '';
+                              const pickup = locations[Math.floor(Math.random() * locations.length)];
+                              const destination = locations[Math.floor(Math.random() * locations.length)];
+                              
+                              trips.push({
+                                id: `BK-${String(Math.floor(Math.random() * 9000) + 1000).padStart(4, '0')}`,
+                                date,
+                                pickup,
+                                destination,
+                                status,
+                                fare,
+                                promo
+                              });
+                            }
+                            
+                            return trips.map((trip, index) => (
+                              <div key={trip.id} className="flex items-center justify-between py-1.5 px-2 hover:bg-gray-50 rounded">
+                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                  <span className="text-xs font-mono text-gray-500 shrink-0">{trip.id}</span>
+                                  <div className={`px-1.5 py-0.5 rounded text-xs font-medium shrink-0 ${
+                                    trip.status === 'completed' ? 'bg-green-100 text-green-700' :
+                                    trip.status === 'cancelled' ? 'bg-red-100 text-red-700' :
+                                    'bg-yellow-100 text-yellow-700'
+                                  }`}>
+                                    {trip.status}
+                                  </div>
+                                  {trip.promo && (
+                                    <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 text-xs font-medium rounded shrink-0">
+                                      {trip.promo}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <div className="font-semibold text-gray-900 text-sm">
+                                    {trip.status === 'completed' ? `₱${trip.fare.toFixed(2)}` : '—'}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    {trip.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                  </div>
+                                </div>
+                              </div>
+                            ));
+                          })()}
+                          
+                          <div className="text-center pt-1 border-t border-gray-100 mt-2">
+                            <button className="text-xs text-blue-600 hover:text-blue-800 font-medium py-1">
+                              View All Trip History →
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
                 )}
                 
-                {activeModalTab === 'driver' && (
-                  <div className="space-y-8">
+                {activeModalTab === 'driver-vehicle' && (
+                  <div className="space-y-4">
                     {booking.details.driver ? (
                       <>
-                        {/* Driver Information */}
-                        <div className="bg-white">
-                          <div className="flex items-center gap-3 mb-6">
-                            <UserCheck className="w-5 h-5 text-gray-400" />
-                            <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">Driver Information</h3>
-                          </div>
-                          
-                          <div className="space-y-6">
-                            <div className="space-y-4">
-                              <div className="grid grid-cols-3 gap-4 items-center">
-                                <label className="text-sm text-gray-500 font-medium">Driver Name</label>
-                                <p className="font-medium text-gray-900 col-span-2">{booking.details.driver.name}</p>
+                        {/* Two Column Layout */}
+                        <div className="grid grid-cols-2 gap-6">
+                          {/* Driver Profile */}
+                          <div className="bg-white">
+                            <div className="flex items-center justify-between mb-4">
+                              <div className="flex items-center gap-3">
+                                <UserCheck className="w-5 h-5 text-gray-400" />
+                                <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">Driver Profile</h3>
+                              </div>
+                              {/* Driver Avatar */}
+                              <div className="w-10 h-10 bg-gradient-to-br from-green-400 to-blue-500 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                                {booking.details.driver.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                              </div>
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <div className="flex justify-between items-center py-0.5">
+                                <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Driver Name</label>
+                                <p className="font-medium text-gray-900 text-sm">{booking.details.driver.name}</p>
                               </div>
                               
-                              <div className="grid grid-cols-3 gap-4 items-center">
-                                <label className="text-sm text-gray-500 font-medium">Phone Number</label>
-                                <p className="font-medium text-gray-900 col-span-2">{booking.details.driver.phone}</p>
+                              <div className="flex justify-between items-center py-0.5">
+                                <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Phone</label>
+                                <p className="font-medium text-gray-900 text-sm font-mono">{booking.details.driver.phone}</p>
                               </div>
                               
-                              <div className="grid grid-cols-3 gap-4 items-center">
-                                <label className="text-sm text-gray-500 font-medium">Rating</label>
-                                <div className="flex items-center gap-2 col-span-2">
-                                  <Star className="w-4 h-4 text-yellow-400 fill-current" />
-                                  <span className="font-medium text-gray-900">{booking.details.driver.rating.toFixed(1)}</span>
+                              <div className="flex justify-between items-center py-0.5">
+                                <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">License</label>
+                                <p className="font-medium text-gray-900 text-sm">
+                                  {(() => {
+                                    const licenses = ['N02-12-123456', 'A03-15-654321', 'N01-18-987654', 'B04-20-112233'];
+                                    return licenses[Math.floor(Math.random() * licenses.length)];
+                                  })()}
+                                </p>
+                              </div>
+                              
+                              <div className="flex justify-between items-center py-0.5">
+                                <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Status</label>
+                                <div className="flex items-center gap-1">
+                                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                  <span className="text-sm font-medium text-green-700">Online</span>
                                 </div>
                               </div>
                               
-                              <div className="grid grid-cols-3 gap-4 items-center">
-                                <label className="text-sm text-gray-500 font-medium">Total Trips</label>
-                                <p className="font-medium text-gray-900 col-span-2">{booking.details.driver.totalTrips}</p>
+                              <hr className="my-1.5" />
+                              
+                              <div className="flex justify-between items-center py-0.5">
+                                <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Today's Trips</label>
+                                <p className="font-medium text-gray-900 text-sm">
+                                  {Math.floor(Math.random() * 12) + 1}
+                                </p>
                               </div>
                               
-                              <div className="grid grid-cols-3 gap-4 items-center">
-                                <label className="text-sm text-gray-500 font-medium">Acceptance Rate</label>
-                                <p className="font-medium text-gray-900 col-span-2">{booking.details.driver.acceptanceRate}%</p>
+                              <div className="flex justify-between items-center py-0.5">
+                                <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Rating</label>
+                                <div className="flex items-center gap-1">
+                                  <Star className="w-3 h-3 text-yellow-400 fill-current" />
+                                  <span className="font-medium text-gray-900 text-sm">{booking.details.driver.rating.toFixed(1)}</span>
+                                </div>
+                              </div>
+                              
+                              <div className="flex justify-between items-center py-0.5">
+                                <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Acceptance Rate</label>
+                                <p className="font-medium text-gray-900 text-sm">
+                                  {parseFloat(booking.details.driver.acceptanceRate).toFixed(1)}%
+                                </p>
+                              </div>
+                              
+                              <div className="flex justify-between items-center py-0.5">
+                                <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Join Date</label>
+                                <p className="font-medium text-gray-900 text-sm">
+                                  {(() => {
+                                    const daysAgo = Math.floor(Math.random() * 730) + 90; // 3 months to 2+ years
+                                    const joinDate = new Date();
+                                    joinDate.setDate(joinDate.getDate() - daysAgo);
+                                    return joinDate.toLocaleDateString('en-US', { 
+                                      year: 'numeric', 
+                                      month: 'short', 
+                                      day: 'numeric' 
+                                    });
+                                  })()}
+                                </p>
+                              </div>
+                              
+                              <div className="flex justify-between items-center py-0.5">
+                                <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Today's Earnings</label>
+                                <p className="font-medium text-gray-900 text-sm">
+                                  ₱{(() => {
+                                    const earnings = Math.floor(Math.random() * 1200) + 400; // ₱400-1,600 daily range
+                                    return earnings.toLocaleString();
+                                  })()}
+                                </p>
                               </div>
                             </div>
                           </div>
-                        </div>
-                        
-                        {/* Vehicle Information */}
-                        <div className="bg-white border-t border-gray-100 pt-8">
-                          <div className="flex items-center gap-3 mb-6">
-                            <Car className="w-5 h-5 text-gray-400" />
-                            <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">Vehicle Information</h3>
-                          </div>
                           
-                          <div className="space-y-6">
-                            <div className="space-y-4">
-                              <div className="grid grid-cols-3 gap-4 items-center">
-                                <label className="text-sm text-gray-500 font-medium">Vehicle Model</label>
-                                <p className="font-medium text-gray-900 col-span-2">{booking.details.driver.vehicleModel}</p>
+                          {/* Vehicle Information */}
+                          <div className="bg-white">
+                            <div className="flex items-center gap-3 mb-4">
+                              <Car className="w-5 h-5 text-gray-400" />
+                              <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">Vehicle Details</h3>
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <div className="flex justify-between items-center py-0.5">
+                                <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Make & Model</label>
+                                <p className="font-medium text-gray-900 text-sm">{booking.details.driver.vehicleModel}</p>
                               </div>
                               
-                              <div className="grid grid-cols-3 gap-4 items-center">
-                                <label className="text-sm text-gray-500 font-medium">Plate Number</label>
-                                <p className="font-mono font-medium text-gray-900 col-span-2">{booking.details.driver.vehiclePlate}</p>
+                              <div className="flex justify-between items-center py-0.5">
+                                <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Plate Number</label>
+                                <p className="font-medium text-gray-900 text-sm font-mono">{booking.details.driver.vehiclePlate}</p>
                               </div>
                               
-                              <div className="grid grid-cols-3 gap-4 items-center">
-                                <label className="text-sm text-gray-500 font-medium">Vehicle Type</label>
-                                <p className="font-medium text-gray-900 capitalize col-span-2">{booking.details.driver.vehicleType}</p>
+                              <div className="flex justify-between items-center py-0.5">
+                                <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Vehicle Type</label>
+                                <p className="font-medium text-gray-900 text-sm capitalize">{booking.details.driver.vehicleType}</p>
                               </div>
                               
-                              {booking.details.driver.eta && (
-                                <div className="grid grid-cols-3 gap-4 items-center">
-                                  <label className="text-sm text-gray-500 font-medium">ETA</label>
-                                  <p className="font-semibold text-gray-900 col-span-2">{booking.details.driver.eta} minutes</p>
+                              <div className="flex justify-between items-center py-0.5">
+                                <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Year</label>
+                                <p className="font-medium text-gray-900 text-sm">
+                                  {(() => {
+                                    const currentYear = new Date().getFullYear();
+                                    const year = currentYear - Math.floor(Math.random() * 15) - 2; // 2-17 years old
+                                    return year;
+                                  })()}
+                                </p>
+                              </div>
+                              
+                              <div className="flex justify-between items-center py-0.5">
+                                <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Color</label>
+                                <p className="font-medium text-gray-900 text-sm">
+                                  {(() => {
+                                    const colors = ['White', 'Silver', 'Black', 'Red', 'Blue', 'Gray', 'Yellow'];
+                                    return colors[Math.floor(Math.random() * colors.length)];
+                                  })()}
+                                </p>
+                              </div>
+                              
+                              <div className="flex justify-between items-center py-0.5">
+                                <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Fuel Type</label>
+                                <p className="font-medium text-gray-900 text-sm">
+                                  {(() => {
+                                    const fuelTypes = ['Gasoline', 'Diesel', 'LPG', 'Electric'];
+                                    return fuelTypes[Math.floor(Math.random() * fuelTypes.length)];
+                                  })()}
+                                </p>
+                              </div>
+                              
+                              <hr className="my-1.5" />
+                              
+                              <div className="flex justify-between items-center py-0.5">
+                                <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Insurance</label>
+                                <div className="flex items-center gap-1">
+                                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                  <span className="text-sm font-medium text-green-700">Valid</span>
                                 </div>
-                              )}
+                              </div>
+                              
+                              <div className="flex justify-between items-center py-0.5">
+                                <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Registration</label>
+                                <p className="font-medium text-gray-900 text-sm">
+                                  Expires {(() => {
+                                    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                                    const month = months[Math.floor(Math.random() * 12)];
+                                    const year = 2025 + Math.floor(Math.random() * 2);
+                                    return `${month} ${year}`;
+                                  })()}
+                                </p>
+                              </div>
+                              
+                              <div className="flex justify-between items-center py-0.5">
+                                <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Mileage</label>
+                                <p className="font-medium text-gray-900 text-sm">
+                                  {(() => {
+                                    const mileage = Math.floor(Math.random() * 150000) + 10000; // 10k-160k km
+                                    return `${mileage.toLocaleString()} km`;
+                                  })()}
+                                </p>
+                              </div>
+                              
+                              <div className="flex justify-between items-center py-0.5">
+                                <label className="text-xs text-gray-500 font-medium uppercase tracking-wide">Last Service</label>
+                                <p className="font-medium text-gray-900 text-sm">
+                                  {(() => {
+                                    const daysAgo = Math.floor(Math.random() * 90) + 1; // 1-90 days ago
+                                    const serviceDate = new Date();
+                                    serviceDate.setDate(serviceDate.getDate() - daysAgo);
+                                    return `${daysAgo} days ago`;
+                                  })()}
+                                </p>
+                              </div>
                             </div>
                           </div>
                         </div>
                         
                         {/* Driver Actions */}
-                        <div className="bg-white border-t border-gray-100 pt-8">
-                          <div className="flex items-center gap-3 mb-6">
-                            <Phone className="w-5 h-5 text-gray-400" />
-                            <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">Driver Actions</h3>
-                          </div>
-                          
-                          <div className="flex gap-3">
-                            <button className="bg-[#3B82F6] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#2563EB] transition-colors flex items-center gap-2">
-                              <Phone className="w-4 h-4" />
+                        <div className="bg-white p-4 rounded-lg">
+                          <div className="flex flex-wrap gap-2">
+                            <button 
+                              disabled={!canContactDriver(booking)}
+                              onClick={() => canContactDriver(booking) && handleCallDriver(booking.details.driver.phone)}
+                              className={`px-3 py-2 rounded text-xs font-medium transition-colors flex items-center gap-2 ${
+                                canContactDriver(booking) 
+                                  ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                              }`}
+                            >
+                              <Phone className="w-3 h-3" />
                               Call Driver
                             </button>
-                            <button className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors flex items-center gap-2">
-                              <MapPin className="w-4 h-4" />
+                            <button 
+                              onClick={() => handleTrackLocation(booking)}
+                              className="bg-white border border-gray-300 text-gray-700 px-3 py-2 rounded text-xs font-medium hover:bg-gray-50 transition-colors flex items-center gap-2"
+                            >
+                              <MapPin className="w-3 h-3" />
                               Track Location
                             </button>
-                            <button className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors flex items-center gap-2">
-                              <MessageCircle className="w-4 h-4" />
+                            <button 
+                              disabled={!canContactDriver(booking)}
+                              onClick={() => canContactDriver(booking) && handleMessageDriver(booking)}
+                              className={`px-3 py-2 rounded text-xs font-medium transition-colors flex items-center gap-2 border ${
+                                canContactDriver(booking) 
+                                  ? 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50' 
+                                  : 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+                              }`}
+                            >
+                              <MessageCircle className="w-3 h-3" />
                               Message
+                            </button>
+                            <button 
+                              onClick={() => handleViewDriverProfile(booking)}
+                              className="bg-white border border-gray-300 text-gray-700 px-3 py-2 rounded text-xs font-medium hover:bg-gray-50 transition-colors flex items-center gap-2"
+                            >
+                              <User className="w-3 h-3" />
+                              View Profile
+                            </button>
+                            <button 
+                              onClick={() => handleVehicleHistory(booking)}
+                              className="bg-white border border-gray-300 text-gray-700 px-3 py-2 rounded text-xs font-medium hover:bg-gray-50 transition-colors flex items-center gap-2"
+                            >
+                              <Car className="w-3 h-3" />
+                              Vehicle History
                             </button>
                           </div>
                         </div>
                       </>
                     ) : (
-                      <div className="bg-white">
-                        <div className="flex items-center gap-3 mb-6">
-                          <UserCheck className="w-5 h-5 text-gray-400" />
-                          <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">Driver Assignment</h3>
-                        </div>
-                        
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-3">
-                            <span className="px-3 py-1 bg-[#FFF7ED] text-[#D97706] rounded-full text-sm font-medium">
-                              Unassigned
-                            </span>
-                            <span className="text-sm text-gray-600">No driver assigned to this booking</span>
-                          </div>
-                          
-                          <div className="pt-2">
-                            <button className="bg-[#3B82F6] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#2563EB] transition-colors">
-                              Force Assign Driver
-                            </button>
-                          </div>
-                        </div>
+                      <div className="bg-white p-6 rounded-lg text-center">
+                        <UserCheck className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">No Driver Assigned</h3>
+                        <p className="text-gray-500 mb-4">This booking is waiting for driver assignment.</p>
+                        <button className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
+                          Force Assign Driver
+                        </button>
                       </div>
                     )}
                   </div>
                 )}
                 
-                {activeModalTab === 'compliance' && (
-                  <div className="space-y-6">
-                    {/* Risk Assessment Section */}
-                    <div className="grid md:grid-cols-2 gap-6">
-                      {/* Risk Flags */}
-                      <div className="bg-gradient-to-br from-red-50 to-orange-50 rounded-lg p-6 border border-red-200">
-                        <div className="flex items-center gap-3 mb-4">
-                          <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                            <AlertTriangle className="w-5 h-5 text-red-600" />
-                          </div>
-                          <div>
-                            <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">Risk Assessment</h3>
-                            <p className="text-sm text-gray-600">Automated flags and alerts</p>
-                          </div>
-                        </div>
-                        
-                        <div className="space-y-3">
-                          {booking.details.passenger.totalTrips < 5 && (
-                            <div className="flex items-center justify-between p-3 bg-yellow-100 rounded-md border border-yellow-200">
-                              <div className="flex items-center gap-2">
-                                <AlertCircle className="w-4 h-4 text-yellow-600" />
-                                <span className="text-sm font-medium text-yellow-800">New User</span>
-                              </div>
-                              <span className="px-2 py-1 bg-yellow-200 text-yellow-800 text-xs rounded">LOW</span>
-                            </div>
-                          )}
-                          
-                          {booking.fare > 500 && (
-                            <div className="flex items-center justify-between p-3 bg-orange-100 rounded-md border border-orange-200">
-                              <div className="flex items-center gap-2">
-                                <TrendingUp className="w-4 h-4 text-orange-600" />
-                                <span className="text-sm font-medium text-orange-800">High Value Trip</span>
-                              </div>
-                              <span className="px-2 py-1 bg-orange-200 text-orange-800 text-xs rounded">MEDIUM</span>
-                            </div>
-                          )}
-                          
-                          {booking.details.passenger.rating < 4.0 && (
-                            <div className="flex items-center justify-between p-3 bg-red-100 rounded-md border border-red-200">
-                              <div className="flex items-center gap-2">
-                                <Star className="w-4 h-4 text-red-600" />
-                                <span className="text-sm font-medium text-red-800">Low Rating</span>
-                              </div>
-                              <span className="px-2 py-1 bg-red-200 text-red-800 text-xs rounded">HIGH</span>
-                            </div>
-                          )}
-                          
-                          {/* No risks scenario */}
-                          {booking.details.passenger.totalTrips >= 5 && booking.fare <= 500 && booking.details.passenger.rating >= 4.0 && (
-                            <div className="flex items-center justify-center p-4 bg-green-100 rounded-md border border-green-200">
-                              <div className="text-center">
-                                <CheckCircle className="w-6 h-6 text-green-600 mx-auto mb-2" />
-                                <span className="text-sm font-medium text-green-800">No Risk Flags Detected</span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      
-                      {/* LTFRB Compliance */}
-                      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-6 border border-blue-200">
-                        <div className="flex items-center gap-3 mb-4">
-                          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                            <Shield className="w-5 h-5 text-blue-600" />
-                          </div>
-                          <div>
-                            <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">LTFRB Compliance</h3>
-                            <p className="text-sm text-gray-600">Philippine transport regulation</p>
-                          </div>
-                        </div>
-                        
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm text-gray-600">Service Type:</span>
-                            <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">
-                              {getServiceDisplayName(booking.serviceType)}
-                            </span>
-                          </div>
-                          
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm text-gray-600">Fare Compliance:</span>
-                            <div className="flex items-center gap-1">
-                              <CheckCircle className="w-4 h-4 text-green-600" />
-                              <span className="text-sm font-medium text-green-700">Compliant</span>
-                            </div>
-                          </div>
-                          
-                          {booking.details.driver && (
-                            <>
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm text-gray-600">Driver License:</span>
-                                <div className="flex items-center gap-1">
-                                  <CheckCircle className="w-4 h-4 text-[#22C55E]" />
-                                  <span className="text-sm font-medium text-green-700">Valid</span>
-                                </div>
-                              </div>
-                              
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm text-gray-600">Vehicle Registration:</span>
-                                <div className="flex items-center gap-1">
-                                  <CheckCircle className="w-4 h-4 text-[#22C55E]" />
-                                  <span className="text-sm font-medium text-green-700">Active</span>
-                                </div>
-                              </div>
-                              
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm text-gray-600">Insurance Status:</span>
-                                <div className="flex items-center gap-1">
-                                  <CheckCircle className="w-4 h-4 text-[#22C55E]" />
-                                  <span className="text-sm font-medium text-green-700">Current</span>
-                                </div>
-                              </div>
-                            </>
-                          )}
-                          
-                          <div className="mt-4 pt-3 border-t border-blue-200">
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium text-gray-700">Overall Compliance:</span>
-                              <div className="flex items-center gap-1">
-                                <CheckCircle className="w-4 h-4 text-[#22C55E]" />
-                                <span className="text-sm font-semibold text-[#16A34A]">PASSED</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Safety & Security Section */}
-                    <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-6 border border-purple-200">
-                      <div className="flex items-center gap-3 mb-6">
-                        <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-                          <AlertTriangle className="w-5 h-5 text-purple-600" />
-                        </div>
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">Safety & Security</h3>
-                          <p className="text-sm text-gray-600">Emergency protocols and safety measures</p>
-                        </div>
-                      </div>
-                      
-                      {/* Emergency Alert Banner - Show when emergency flag is active */}
-                      {booking.details?.emergencyFlag && (
-                        <div className="mb-6 p-4 bg-red-100 border-2 border-red-500 rounded-lg">
-                          <div className="flex items-center gap-3">
-                            <div className="flex items-center">
-                              <AlertTriangle className="w-6 h-6 text-red-600 animate-pulse mr-2" />
-                              <span className="text-lg font-bold text-red-900">🚨 ACTIVE EMERGENCY</span>
-                            </div>
-                          </div>
-                          <p className="text-sm text-red-800 mt-2">
-                            Emergency assistance has been requested for this trip. Immediate attention required.
-                          </p>
-                        </div>
-                      )}
-
-                      <div className="grid md:grid-cols-3 gap-4">
-                        <div className="bg-white rounded-md p-4 border border-gray-100">
-                          <div className="flex items-center gap-2 mb-2">
-                            <MapPin className="w-4 h-4 text-green-600" />
-                            <span className="text-sm font-medium text-gray-900">GPS Tracking</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                            <span className="text-xs text-green-700">Active</span>
-                          </div>
-                        </div>
-                        
-                        <div className="bg-white rounded-md p-4 border border-gray-100">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Phone className="w-4 h-4 text-blue-600" />
-                            <span className="text-sm font-medium text-gray-900">Emergency Contact</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <CheckCircle className="w-3 h-3 text-green-600" />
-                            <span className="text-xs text-green-700">Available</span>
-                          </div>
-                        </div>
-                        
-                        <div className={`rounded-md p-4 border ${booking.details?.emergencyFlag ? 'bg-red-50 border-red-300' : 'bg-white border-gray-100'}`}>
-                          <div className="flex items-center gap-2 mb-2">
-                            <AlertTriangle className={`w-4 h-4 ${booking.details?.emergencyFlag ? 'text-red-600' : 'text-orange-600'}`} />
-                            <span className="text-sm font-medium text-gray-900">SOS Button</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {booking.details?.emergencyFlag ? (
-                              <>
-                                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                                <span className="text-xs text-red-700 font-bold">EMERGENCY ACTIVE</span>
-                              </>
-                            ) : (
-                              <>
-                                <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
-                                <span className="text-xs text-orange-700">Standby</span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="mt-4 p-3 bg-blue-100 rounded-md border border-blue-200">
-                        <div className="flex items-center gap-2 text-sm text-blue-800">
-                          <Clock className="w-4 h-4" />
-                          <span className="font-medium">Last Safety Check: </span>
-                          <span>{new Date(Date.now() - 1000 * 60 * 15).toLocaleTimeString()}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
                 
                 {activeModalTab === 'audit' && (
-                  <div className="space-y-6">
+                  <div className="grid grid-cols-3 gap-6">
                     {/* Quick Actions Section */}
                     <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-6 border border-green-200">
                       <div className="flex items-center gap-3 mb-4">
@@ -2688,45 +3647,48 @@ const BookingsPage = () => {
                         </div>
                       </div>
                       
-                      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-3">
-                        <button className="flex items-center justify-center gap-2 p-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium">
+                      <div className="space-y-2">
+                        <button className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium">
                           <Phone className="w-4 h-4 text-blue-600" />
                           Contact Passenger
                         </button>
                         
                         {booking.details.driver && (
-                          <button className="flex items-center justify-center gap-2 p-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium">
+                          <button className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium">
                             <MessageCircle className="w-4 h-4 text-green-600" />
                             Contact Driver
                           </button>
                         )}
                         
-                        <button className="flex items-center justify-center gap-2 p-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium">
+                        <button 
+                          onClick={() => handleTrackLocation(booking)}
+                          className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+                        >
                           <MapPin className="w-4 h-4 text-purple-600" />
                           Track Location
                         </button>
-                        
-                        <button className="flex items-center justify-center gap-2 p-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium">
+
+                        <button className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium">
                           <AlertTriangle className="w-4 h-4 text-red-600" />
                           Emergency Support
                         </button>
                         
-                        <button className="flex items-center justify-center gap-2 p-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium">
+                        <button className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium">
                           <CreditCard className="w-4 h-4 text-orange-600" />
                           Process Refund
                         </button>
                         
-                        <button className="flex items-center justify-center gap-2 p-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium">
+                        <button className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium">
                           <Flag className="w-4 h-4 text-yellow-600" />
                           Flag Issue
                         </button>
-                        
-                        <button className="flex items-center justify-center gap-2 p-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium">
+
+                        <button className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium">
                           <Download className="w-4 h-4 text-indigo-600" />
                           Export Data
                         </button>
                         
-                        <button className="flex items-center justify-center gap-2 p-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium">
+                        <button className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium">
                           <Copy className="w-4 h-4 text-gray-600" />
                           Copy Details
                         </button>
@@ -2891,6 +3853,178 @@ const BookingsPage = () => {
                           <Shield className="w-4 h-4" />
                           <span className="font-medium">Current Role: {userRole}</span>
                           <span className="text-yellow-600">• Access Level: {userRole === 'admin' ? 'Full' : 'Limited'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {activeModalTab === 'aiml' && (
+                  <div className="space-y-6">
+                    {/* Two Column Layout */}
+                    <div className="grid grid-cols-2 gap-6">
+                      {/* Model Training Contributions */}
+                      <div className="bg-white">
+                        <div className="flex items-center gap-3 mb-4">
+                          <Brain className="w-5 h-5 text-gray-400" />
+                          <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">Model Training Contributions</h3>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <div className="p-3 border border-gray-200 rounded-lg">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Target className="w-4 h-4 text-blue-600" />
+                              <span className="font-medium text-gray-900">Demand Prediction</span>
+                            </div>
+                            <div className="text-xs text-gray-600">
+                              <p>• Route popularity: High-demand corridor</p>
+                              <p>• Time pattern: Peak hour data point</p>
+                              <p>• Weather correlation: Rainy day behavior</p>
+                              <p className="text-blue-600 font-medium mt-1">Model confidence: +0.3%</p>
+                            </div>
+                          </div>
+                          
+                          <div className="p-3 border border-gray-200 rounded-lg">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Route className="w-4 h-4 text-green-600" />
+                              <span className="font-medium text-gray-900">Route Optimization</span>
+                            </div>
+                            <div className="text-xs text-gray-600">
+                              <p>• Traffic pattern: Alternative route validation</p>
+                              <p>• ETA accuracy: Within 2-minute variance</p>
+                              <p>• Fuel efficiency: 8% better than baseline</p>
+                              <p className="text-green-600 font-medium mt-1">Algorithm improvement: +0.5%</p>
+                            </div>
+                          </div>
+                          
+                          <div className="p-3 border border-gray-200 rounded-lg">
+                            <div className="flex items-center gap-2 mb-2">
+                              <DollarSign className="w-4 h-4 text-orange-600" />
+                              <span className="font-medium text-gray-900">Dynamic Pricing</span>
+                            </div>
+                            <div className="text-xs text-gray-600">
+                              <p>• Surge factor: 1.2x validated</p>
+                              <p>• Price sensitivity: Customer accepted</p>
+                              <p>• Market response: Optimal pricing confirmed</p>
+                              <p className="text-orange-600 font-medium mt-1">Revenue optimization: +2.1%</p>
+                            </div>
+                          </div>
+                          
+                          <div className="p-3 border border-gray-200 rounded-lg">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Shield className="w-4 h-4 text-red-600" />
+                              <span className="font-medium text-gray-900">Fraud Detection</span>
+                            </div>
+                            <div className="text-xs text-gray-600">
+                              <p>• Behavioral pattern: Normal user activity</p>
+                              <p>• Payment verification: Clean transaction</p>
+                              <p>• Location consistency: Route validated</p>
+                              <p className="text-red-600 font-medium mt-1">Security model: +0.8%</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* AI-Generated Insights */}
+                      <div className="bg-white">
+                        <div className="flex items-center gap-3 mb-4">
+                          <BarChart3 className="w-5 h-5 text-gray-400" />
+                          <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">AI-Generated Insights</h3>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <div className="p-3 border border-gray-200 rounded-lg">
+                            <div className="flex items-start gap-3">
+                              <div className="w-2 h-2 bg-green-500 rounded-full mt-2"></div>
+                              <div>
+                                <h4 className="text-sm font-medium text-gray-900 mb-1">Customer Retention Opportunity</h4>
+                                <p className="text-xs text-gray-600 mb-2">Passenger shows loyalty patterns with 89% trip completion rate. Recommend personalized discount for next 3 bookings.</p>
+                                <div className="flex items-center gap-2 text-xs">
+                                  <span className="px-2 py-1 bg-green-100 text-green-700 rounded">High Confidence</span>
+                                  <span className="text-gray-500">Customer LTV Model v2.3</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="p-3 border border-gray-200 rounded-lg">
+                            <div className="flex items-start gap-3">
+                              <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
+                              <div>
+                                <h4 className="text-sm font-medium text-gray-900 mb-1">Driver Performance Insight</h4>
+                                <p className="text-xs text-gray-600 mb-2">Driver completed trip 12% faster than average. Route knowledge excellent for this corridor. Consider for premium service tier.</p>
+                                <div className="flex items-center gap-2 text-xs">
+                                  <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded">Medium Confidence</span>
+                                  <span className="text-gray-500">Driver Analytics Engine v1.8</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="p-3 border border-gray-200 rounded-lg">
+                            <div className="flex items-start gap-3">
+                              <div className="w-2 h-2 bg-orange-500 rounded-full mt-2"></div>
+                              <div>
+                                <h4 className="text-sm font-medium text-gray-900 mb-1">Market Expansion Signal</h4>
+                                <p className="text-xs text-gray-600 mb-2">Route shows 340% demand growth vs last quarter. Consider increasing driver allocation for this area during peak hours.</p>
+                                <div className="flex items-center gap-2 text-xs">
+                                  <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded">High Confidence</span>
+                                  <span className="text-gray-500">Market Intelligence AI v3.1</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Data Pipeline Status - Full Width */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-6">
+                      <div className="flex items-center gap-3 mb-4">
+                        <Database className="w-5 h-5 text-gray-400" />
+                        <h3 className="text-lg font-semibold text-gray-900 font-[Inter]">Data Pipeline Status</h3>
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="p-3 border border-gray-200 rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-gray-900">Data Ingestion</span>
+                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                          </div>
+                          <div className="text-xs text-gray-600">
+                            <p>Processed: 2.3s ago</p>
+                            <p>Next batch: 30s</p>
+                          </div>
+                        </div>
+                        
+                        <div className="p-3 border border-gray-200 rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-gray-900">Model Updates</span>
+                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                          </div>
+                          <div className="text-xs text-gray-600">
+                            <p>Last update: 15m ago</p>
+                            <p>Models affected: 4/12</p>
+                          </div>
+                        </div>
+                        
+                        <div className="p-3 border border-gray-200 rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-gray-900">Insights Ready</span>
+                            <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                          </div>
+                          <div className="text-xs text-gray-600">
+                            <p>Generated: Now</p>
+                            <p>Confidence: 87%</p>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="mt-4 p-3 bg-blue-50 rounded-md border border-blue-200">
+                        <div className="flex items-center gap-2 text-sm text-blue-800">
+                          <Brain className="w-4 h-4" />
+                          <span className="font-medium">AI Status:</span>
+                          <span className="text-blue-600">All models operating normally • Training pipeline active</span>
                         </div>
                       </div>
                     </div>

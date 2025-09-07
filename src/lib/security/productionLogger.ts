@@ -27,8 +27,12 @@ class ProductionLogger {
     this.logLevel = this.isProduction ? LogLevel.ERROR : LogLevel.DEBUG;
   }
 
-  private sanitizeData(data: any): any {
+  private sanitizeData(data: any, seen = new WeakSet()): any {
     if (!data || typeof data !== 'object') return data;
+    
+    // Prevent circular references
+    if (seen.has(data)) return '[CIRCULAR]';
+    seen.add(data);
 
     const sensitiveKeys = [
       'password', 'token', 'secret', 'key', 'authorization',
@@ -37,17 +41,21 @@ class ProductionLogger {
       'refreshToken', 'accessToken', 'sessionId'
     ];
 
-    const sanitized = Array.isArray(data) ? [...data] : { ...data };
+    try {
+      const sanitized = Array.isArray(data) ? [...data] : { ...data };
 
-    for (const key in sanitized) {
-      if (sensitiveKeys.some(sensitive => key.toLowerCase().includes(sensitive.toLowerCase()))) {
-        sanitized[key] = '[REDACTED]';
-      } else if (typeof sanitized[key] === 'object') {
-        sanitized[key] = this.sanitizeData(sanitized[key]);
+      for (const key in sanitized) {
+        if (sensitiveKeys.some(sensitive => key.toLowerCase().includes(sensitive.toLowerCase()))) {
+          sanitized[key] = '[REDACTED]';
+        } else if (typeof sanitized[key] === 'object' && sanitized[key] !== null) {
+          sanitized[key] = this.sanitizeData(sanitized[key], seen);
+        }
       }
-    }
 
-    return sanitized;
+      return sanitized;
+    } catch (error) {
+      return '[SANITIZATION_ERROR]';
+    }
   }
 
   private shouldLog(level: LogLevel): boolean {

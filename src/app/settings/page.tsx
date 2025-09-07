@@ -155,7 +155,7 @@ const SettingsPage = () => {
   // Sub-tab states for each main tab
   const [activeSystemSubTab, setActiveSystemSubTab] = useState('health');
   const [activeUserSubTab, setActiveUserSubTab] = useState('users');
-  const [activeApiSubTab, setActiveApiSubTab] = useState('xpress-api');
+  const [activeApiSubTab, setActiveApiSubTab] = useState('gateway');
   const [activeSecuritySubTab, setActiveSecuritySubTab] = useState('settings');
   const [activeNotificationsSubTab, setActiveNotificationsSubTab] = useState('preferences');
   const [activeAuditSubTab, setActiveAuditSubTab] = useState('logs');
@@ -655,110 +655,114 @@ const SettingsPage = () => {
       case 'monitoring':
         return (
           <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">System Monitoring</h3>
-              <p className="text-sm text-gray-600 mb-6">Real-time metrics and performance monitoring</p>
+            <div className="mb-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">System Monitoring</h2>
+              <p className="text-sm text-gray-600">Real-time metrics and performance monitoring</p>
             </div>
             
-            {/* Performance Metrics */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                <div className="flex items-center justify-between">
+            {/* Performance Metrics - 2 Column Grid */}
+            <div className="grid grid-cols-2 gap-6">
+              <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl border border-blue-200 p-6">
+                <div className="flex items-center justify-between mb-4">
                   <div>
-                    <p className="text-sm font-medium text-gray-600">CPU Usage</p>
-                    <p className="text-2xl font-bold text-gray-900">23%</p>
+                    <p className="text-sm font-medium text-gray-700">CPU Usage</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-1">23%</p>
                   </div>
-                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <Activity className="w-6 h-6 text-blue-600" />
+                  <div className="w-12 h-12 bg-blue-500 rounded-xl flex items-center justify-center">
+                    <Activity className="w-6 h-6 text-white" />
                   </div>
                 </div>
-                <div className="mt-4 flex items-center text-sm">
-                  <span className="text-green-600">Normal</span>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Normal</span>
+                  <span className="text-xs text-gray-500">within optimal range</span>
                 </div>
               </div>
               
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                <div className="flex items-center justify-between">
+              <div className="bg-gradient-to-r from-yellow-50 to-yellow-100 rounded-xl border border-yellow-200 p-6">
+                <div className="flex items-center justify-between mb-4">
                   <div>
-                    <p className="text-sm font-medium text-gray-600">Memory</p>
-                    <p className="text-2xl font-bold text-gray-900">67%</p>
+                    <p className="text-sm font-medium text-gray-700">Memory Usage</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-1">67%</p>
                   </div>
-                  <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                    <Database className="w-6 h-6 text-yellow-600" />
+                  <div className="w-12 h-12 bg-yellow-500 rounded-xl flex items-center justify-center">
+                    <Database className="w-6 h-6 text-white" />
                   </div>
                 </div>
-                <div className="mt-4 flex items-center text-sm">
-                  <span className="text-yellow-600">Moderate</span>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Moderate</span>
+                  <span className="text-xs text-gray-500">approaching threshold</span>
                 </div>
               </div>
               
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                <div className="flex items-center justify-between">
+              <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-xl border border-green-200 p-6">
+                <div className="flex items-center justify-between mb-4">
                   <div>
-                    <p className="text-sm font-medium text-gray-600">Active Users</p>
-                    <p className="text-2xl font-bold text-gray-900">1,247</p>
+                    <p className="text-sm font-medium text-gray-700">Active Users</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-1">1,247</p>
                   </div>
-                  <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                    <Users className="w-6 h-6 text-green-600" />
+                  <div className="w-12 h-12 bg-green-500 rounded-xl flex items-center justify-center">
+                    <Users className="w-6 h-6 text-white" />
                   </div>
                 </div>
-                <div className="mt-4 flex items-center text-sm">
-                  <span className="text-green-600">+12% vs yesterday</span>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">+12%</span>
+                  <span className="text-xs text-gray-500">vs yesterday</span>
                 </div>
               </div>
               
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                <div className="flex items-center justify-between">
+              <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-xl border border-green-200 p-6">
+                <div className="flex items-center justify-between mb-4">
                   <div>
-                    <p className="text-sm font-medium text-gray-600">Response Time</p>
-                    <p className="text-2xl font-bold text-gray-900">89ms</p>
+                    <p className="text-sm font-medium text-gray-700">Response Time</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-1">89ms</p>
                   </div>
-                  <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                    <Activity className="w-6 h-6 text-green-600" />
+                  <div className="w-12 h-12 bg-green-500 rounded-xl flex items-center justify-center">
+                    <Activity className="w-6 h-6 text-white" />
                   </div>
                 </div>
-                <div className="mt-4 flex items-center text-sm">
-                  <span className="text-green-600">Excellent</span>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Excellent</span>
+                  <span className="text-xs text-gray-500">optimal performance</span>
                 </div>
               </div>
             </div>
             
             {/* System Status */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h4 className="font-medium text-gray-900 mb-4">Service Status</h4>
-              <div className="space-y-3">
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-6">Service Status</h3>
+              <div className="space-y-4">
                 <div>
                   <button 
                     onClick={() => setExpandedService(expandedService === 'api' ? null : 'api')}
-                    className="w-full flex items-center justify-between p-3 bg-green-50 hover:bg-green-100 rounded-lg transition-colors group"
+                    className="w-full flex items-center justify-between p-4 bg-green-50 hover:bg-green-100 rounded-xl border border-green-200 transition-all duration-200 group"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                    <div className="flex items-center gap-4">
+                      <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
                       <span className="font-medium text-gray-900">API Server</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-green-600 bg-green-100 px-2 py-1 rounded">Online</span>
-                      <span className="text-gray-400 group-hover:text-gray-600 text-sm">View logs →</span>
+                    <div className="flex items-center gap-3">
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Online</span>
+                      <span className="text-gray-400 group-hover:text-gray-600 text-sm font-medium">View logs →</span>
                     </div>
                   </button>
                   {expandedService === 'api' && (
-                    <div className="mt-2 p-4 bg-gray-50 rounded-lg border-l-4 border-green-500">
-                      <div className="space-y-2 text-sm">
+                    <div className="mt-3 p-5 bg-gray-50 rounded-xl border-l-4 border-green-500">
+                      <div className="grid grid-cols-2 gap-4 text-sm">
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Uptime:</span>
-                          <span className="font-medium">99.9% (24h)</span>
+                          <span className="text-gray-600 font-medium">Uptime:</span>
+                          <span className="font-semibold text-gray-900">99.9% (24h)</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Requests/min:</span>
-                          <span className="font-medium">1,247</span>
+                          <span className="text-gray-600 font-medium">Requests/min:</span>
+                          <span className="font-semibold text-gray-900">1,247</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Error rate:</span>
-                          <span className="font-medium text-green-600">0.03%</span>
+                          <span className="text-gray-600 font-medium">Error rate:</span>
+                          <span className="font-semibold text-green-600">0.03%</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Last restart:</span>
-                          <span className="font-medium">2 hours ago</span>
+                          <span className="text-gray-600 font-medium">Last restart:</span>
+                          <span className="font-semibold text-gray-900">2 hours ago</span>
                         </div>
                       </div>
                     </div>
@@ -768,35 +772,35 @@ const SettingsPage = () => {
                 <div>
                   <button 
                     onClick={() => setExpandedService(expandedService === 'database' ? null : 'database')}
-                    className="w-full flex items-center justify-between p-3 bg-green-50 hover:bg-green-100 rounded-lg transition-colors group"
+                    className="w-full flex items-center justify-between p-4 bg-green-50 hover:bg-green-100 rounded-xl border border-green-200 transition-all duration-200 group"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                    <div className="flex items-center gap-4">
+                      <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
                       <span className="font-medium text-gray-900">Database</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-green-600 bg-green-100 px-2 py-1 rounded">Connected</span>
-                      <span className="text-gray-400 group-hover:text-gray-600 text-sm">View metrics →</span>
+                    <div className="flex items-center gap-3">
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Connected</span>
+                      <span className="text-gray-400 group-hover:text-gray-600 text-sm font-medium">View metrics →</span>
                     </div>
                   </button>
                   {expandedService === 'database' && (
-                    <div className="mt-2 p-4 bg-gray-50 rounded-lg border-l-4 border-green-500">
-                      <div className="space-y-2 text-sm">
+                    <div className="mt-3 p-5 bg-gray-50 rounded-xl border-l-4 border-green-500">
+                      <div className="grid grid-cols-2 gap-4 text-sm">
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Connections:</span>
-                          <span className="font-medium">23/100</span>
+                          <span className="text-gray-600 font-medium">Connections:</span>
+                          <span className="font-semibold text-gray-900">23/100</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Queries/sec:</span>
-                          <span className="font-medium">156</span>
+                          <span className="text-gray-600 font-medium">Queries/sec:</span>
+                          <span className="font-semibold text-gray-900">156</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Storage used:</span>
-                          <span className="font-medium">2.3GB / 10GB</span>
+                          <span className="text-gray-600 font-medium">Storage used:</span>
+                          <span className="font-semibold text-gray-900">2.3GB / 10GB</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Avg query time:</span>
-                          <span className="font-medium text-green-600">12ms</span>
+                          <span className="text-gray-600 font-medium">Avg query time:</span>
+                          <span className="font-semibold text-green-600">12ms</span>
                         </div>
                       </div>
                     </div>
@@ -806,35 +810,35 @@ const SettingsPage = () => {
                 <div>
                   <button 
                     onClick={() => setExpandedService(expandedService === 'websocket' ? null : 'websocket')}
-                    className="w-full flex items-center justify-between p-3 bg-green-50 hover:bg-green-100 rounded-lg transition-colors group"
+                    className="w-full flex items-center justify-between p-4 bg-green-50 hover:bg-green-100 rounded-xl border border-green-200 transition-all duration-200 group"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                    <div className="flex items-center gap-4">
+                      <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
                       <span className="font-medium text-gray-900">WebSocket</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-green-600 bg-green-100 px-2 py-1 rounded">Active</span>
-                      <span className="text-gray-400 group-hover:text-gray-600 text-sm">View connections →</span>
+                    <div className="flex items-center gap-3">
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Active</span>
+                      <span className="text-gray-400 group-hover:text-gray-600 text-sm font-medium">View connections →</span>
                     </div>
                   </button>
                   {expandedService === 'websocket' && (
-                    <div className="mt-2 p-4 bg-gray-50 rounded-lg border-l-4 border-green-500">
-                      <div className="space-y-2 text-sm">
+                    <div className="mt-3 p-5 bg-gray-50 rounded-xl border-l-4 border-green-500">
+                      <div className="grid grid-cols-2 gap-4 text-sm">
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Active connections:</span>
-                          <span className="font-medium">892</span>
+                          <span className="text-gray-600 font-medium">Active connections:</span>
+                          <span className="font-semibold text-gray-900">892</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Messages/min:</span>
-                          <span className="font-medium">3,451</span>
+                          <span className="text-gray-600 font-medium">Messages/min:</span>
+                          <span className="font-semibold text-gray-900">3,451</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Data transferred:</span>
-                          <span className="font-medium">45.2MB</span>
+                          <span className="text-gray-600 font-medium">Data transferred:</span>
+                          <span className="font-semibold text-gray-900">45.2MB</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Avg latency:</span>
-                          <span className="font-medium text-green-600">23ms</span>
+                          <span className="text-gray-600 font-medium">Avg latency:</span>
+                          <span className="font-semibold text-green-600">23ms</span>
                         </div>
                       </div>
                     </div>
@@ -844,35 +848,35 @@ const SettingsPage = () => {
                 <div>
                   <button 
                     onClick={() => setExpandedService(expandedService === 'jobs' ? null : 'jobs')}
-                    className="w-full flex items-center justify-between p-3 bg-yellow-50 hover:bg-yellow-100 rounded-lg transition-colors group"
+                    className="w-full flex items-center justify-between p-4 bg-yellow-50 hover:bg-yellow-100 rounded-xl border border-yellow-200 transition-all duration-200 group"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                    <div className="flex items-center gap-4">
+                      <div className="w-3 h-3 bg-yellow-500 rounded-full animate-pulse"></div>
                       <span className="font-medium text-gray-900">Background Jobs</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-yellow-600 bg-yellow-100 px-2 py-1 rounded">Delayed</span>
-                      <span className="text-gray-400 group-hover:text-gray-600 text-sm">View queue →</span>
+                    <div className="flex items-center gap-3">
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Delayed</span>
+                      <span className="text-gray-400 group-hover:text-gray-600 text-sm font-medium">View queue →</span>
                     </div>
                   </button>
                   {expandedService === 'jobs' && (
-                    <div className="mt-2 p-4 bg-gray-50 rounded-lg border-l-4 border-yellow-500">
-                      <div className="space-y-2 text-sm">
+                    <div className="mt-3 p-5 bg-gray-50 rounded-xl border-l-4 border-yellow-500">
+                      <div className="grid grid-cols-2 gap-4 text-sm">
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Queue size:</span>
-                          <span className="font-medium text-yellow-600">47 pending</span>
+                          <span className="text-gray-600 font-medium">Queue size:</span>
+                          <span className="font-semibold text-yellow-600">47 pending</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Failed jobs:</span>
-                          <span className="font-medium text-red-600">3</span>
+                          <span className="text-gray-600 font-medium">Failed jobs:</span>
+                          <span className="font-semibold text-red-600">3</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Processed today:</span>
-                          <span className="font-medium">1,892</span>
+                          <span className="text-gray-600 font-medium">Processed today:</span>
+                          <span className="font-semibold text-gray-900">1,892</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Avg processing time:</span>
-                          <span className="font-medium">2.3s</span>
+                          <span className="text-gray-600 font-medium">Avg processing time:</span>
+                          <span className="font-semibold text-gray-900">2.3s</span>
                         </div>
                       </div>
                     </div>
@@ -920,11 +924,25 @@ const SettingsPage = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto p-4">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-[#EB1D25] rounded-lg flex items-center justify-center">
+              <Settings className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-semibold text-gray-900">System Settings</h1>
+              <p className="text-sm text-gray-600 mt-1">Manage your system configuration, users, and security settings</p>
+            </div>
+          </div>
+        </div>
+      </div>
 
-        {/* Horizontal Tabs - Xpress Design Standard */}
-        <div className="mb-4 pt-2">
-          <div className="flex items-center gap-1 overflow-x-auto pb-2">
+      <div className="max-w-7xl mx-auto px-6 py-6">
+        {/* Navigation Tabs */}
+        <div className="mb-6">
+          <div className="flex items-center gap-3 overflow-x-auto scrollbar-hide">
             {tabs.map((tab) => {
               const isActive = activeTab === tab.id;
               const Icon = tab.icon;
@@ -933,22 +951,11 @@ const SettingsPage = () => {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-4 h-12 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-200 ${
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
                     isActive
-                      ? 'text-white shadow-lg'
-                      : 'text-gray-600 hover:text-white hover:shadow-md'
+                      ? 'bg-blue-500 text-white'
+                      : 'text-gray-600 hover:bg-blue-100'
                   }`}
-                  style={isActive ? { backgroundColor: 'rgb(235, 29, 37)' } : {}}
-                  onMouseEnter={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.backgroundColor = 'rgb(10, 64, 96)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                    }
-                  }}
                 >
                   <Icon className="w-4 h-4" />
                   {tab.label}
@@ -958,9 +965,11 @@ const SettingsPage = () => {
           </div>
         </div>
 
-        {/* Tab Content */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-          {renderTabContent()}
+        {/* Main Content */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200">
+          <div className="p-8">
+            {renderTabContent()}
+          </div>
         </div>
       </div>
 

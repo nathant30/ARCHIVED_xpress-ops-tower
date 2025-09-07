@@ -1,0 +1,19 @@
+name: Docs Drift Guard
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "apps/**"
+      - "packages/**"
+      - "docs/**"
+      - "scripts/docs-drift-guard.mjs"
+jobs:
+  drift-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run guard
+        run: node scripts/docs-drift-guard.mjs

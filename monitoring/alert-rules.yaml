@@ -1,0 +1,349 @@
+# XpressOps Alert Rules Configuration
+# Agent 12 - Integration Verification & Monitoring Specialist
+#
+# This configuration defines alerting rules for production monitoring.
+# Alerts are sent to Slack for warnings and PagerDuty for critical issues.
+#
+# Integration Setup:
+# - Slack webhook: Configure in Grafana notification channels
+# - PagerDuty: Configure integration key in Grafana
+# - Email: Configure SMTP settings in Grafana
+
+---
+apiVersion: v1
+kind: AlertRuleGroup
+metadata:
+  name: xpressops-alerts
+  namespace: monitoring
+
+groups:
+  # =================================================================
+  # FRONTEND ALERTS
+  # =================================================================
+  - name: frontend-alerts
+    interval: 1m
+    rules:
+      - alert: HighFrontendErrorRate
+        expr: sum(rate(frontend_errors_total[5m])) * 60 > 10
+        for: 5m
+        labels:
+          severity: critical
+          component: frontend
+          team: frontend
+        annotations:
+          summary: "High frontend error rate detected"
+          description: "Frontend error rate is {{ $value }} errors/min (threshold: 10 errors/min) for the last 5 minutes"
+          runbook_url: "https://wiki.xpressops.com/runbooks/frontend-errors"
+        notifications:
+          - slack
+          - pagerduty
+
+      - alert: SlowPageLoad
+        expr: histogram_quantile(0.95, rate(frontend_page_load_duration_bucket[5m])) > 2000
+        for: 5m
+        labels:
+          severity: warning
+          component: frontend
+          team: frontend
+        annotations:
+          summary: "Slow page load time detected"
+          description: "P95 page load time is {{ $value }}ms (threshold: 2000ms)"
+          runbook_url: "https://wiki.xpressops.com/runbooks/slow-page-load"
+        notifications:
+          - slack
+
+      - alert: LowAPISuccessRate
+        expr: (sum(rate(frontend_api_calls_total{status=~"2.."}[5m])) / sum(rate(frontend_api_calls_total[5m]))) * 100 < 95
+        for: 5m
+        labels:
+          severity: warning
+          component: frontend
+          team: frontend
+        annotations:
+          summary: "Low API success rate from frontend"
+          description: "API success rate is {{ $value }}% (threshold: 95%)"
+          runbook_url: "https://wiki.xpressops.com/runbooks/api-failures"
+        notifications:
+          - slack
+
+      - alert: WebSocketDisconnected
+        expr: frontend_websocket_connected == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: frontend
+          team: realtime
+        annotations:
+          summary: "WebSocket connection lost"
+          description: "Frontend WebSocket has been disconnected for 2 minutes"
+          runbook_url: "https://wiki.xpressops.com/runbooks/websocket-issues"
+        notifications:
+          - slack
+          - pagerduty
+
+  # =================================================================
+  # BACKEND API ALERTS
+  # =================================================================
+  - name: backend-api-alerts
+    interval: 1m
+    rules:
+      - alert: HighAPIResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+          component: backend
+          team: backend
+        annotations:
+          summary: "High API response time"
+          description: "P95 API response time is {{ $value }}s (threshold: 2s)"
+          runbook_url: "https://wiki.xpressops.com/runbooks/slow-api"
+        notifications:
+          - slack
+
+      - alert: HighServerErrorRate
+        expr: (sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m]))) * 100 > 1
+        for: 5m
+        labels:
+          severity: critical
+          component: backend
+          team: backend
+        annotations:
+          summary: "High server error rate (5xx)"
+          description: "Server error rate is {{ $value }}% (threshold: 1%)"
+          runbook_url: "https://wiki.xpressops.com/runbooks/server-errors"
+        notifications:
+          - slack
+          - pagerduty
+
+      - alert: DatabaseConnectionPoolHigh
+        expr: (postgres_connections_active / postgres_connections_max) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+          team: backend
+        annotations:
+          summary: "Database connection pool usage high"
+          description: "Connection pool usage is {{ $value }}% (threshold: 80%)"
+          runbook_url: "https://wiki.xpressops.com/runbooks/db-connections"
+        notifications:
+          - slack
+
+      - alert: SlowDatabaseQueries
+        expr: histogram_quantile(0.95, rate(postgres_query_duration_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+          team: backend
+        annotations:
+          summary: "Slow database queries detected"
+          description: "P95 query time is {{ $value }}s (threshold: 1s)"
+          runbook_url: "https://wiki.xpressops.com/runbooks/slow-queries"
+        notifications:
+          - slack
+
+      - alert: ECSServiceUnhealthy
+        expr: aws_ecs_service_running_count / aws_ecs_service_desired_count < 1
+        for: 2m
+        labels:
+          severity: critical
+          component: infrastructure
+          team: devops
+        annotations:
+          summary: "ECS service unhealthy"
+          description: "ECS service has {{ $value }} running tasks vs desired count"
+          runbook_url: "https://wiki.xpressops.com/runbooks/ecs-unhealthy"
+        notifications:
+          - slack
+          - pagerduty
+
+      - alert: HighCPUUsage
+        expr: 100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
+        for: 10m
+        labels:
+          severity: warning
+          component: infrastructure
+          team: devops
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value }}% (threshold: 90%)"
+          runbook_url: "https://wiki.xpressops.com/runbooks/high-cpu"
+        notifications:
+          - slack
+
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+        for: 10m
+        labels:
+          severity: warning
+          component: infrastructure
+          team: devops
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value }}% (threshold: 90%)"
+          runbook_url: "https://wiki.xpressops.com/runbooks/high-memory"
+        notifications:
+          - slack
+
+  # =================================================================
+  # REAL-TIME SYSTEM ALERTS
+  # =================================================================
+  - name: realtime-system-alerts
+    interval: 1m
+    rules:
+      - alert: WebSocketConnectionFailures
+        expr: sum(rate(signalr_connection_failures_total[5m])) * 60 > 5
+        for: 5m
+        labels:
+          severity: critical
+          component: realtime
+          team: realtime
+        annotations:
+          summary: "High WebSocket connection failure rate"
+          description: "WebSocket connection failures at {{ $value }}/min (threshold: 5/min)"
+          runbook_url: "https://wiki.xpressops.com/runbooks/websocket-failures"
+        notifications:
+          - pagerduty
+          - slack
+
+      - alert: HighWebSocketLatency
+        expr: histogram_quantile(0.95, rate(signalr_message_latency_seconds_bucket[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          component: realtime
+          team: realtime
+        annotations:
+          summary: "High WebSocket message latency"
+          description: "P95 WebSocket latency is {{ $value }}s (threshold: 0.5s)"
+          runbook_url: "https://wiki.xpressops.com/runbooks/websocket-latency"
+        notifications:
+          - slack
+
+      - alert: LowVehicleUpdateFrequency
+        expr: rate(vehicle_location_updates_total[5m]) * 60 < 100
+        for: 5m
+        labels:
+          severity: warning
+          component: realtime
+          team: realtime
+        annotations:
+          summary: "Low vehicle location update frequency"
+          description: "Vehicle updates at {{ $value }}/min (expected: >100/min for 275 vehicles)"
+          runbook_url: "https://wiki.xpressops.com/runbooks/vehicle-updates"
+        notifications:
+          - slack
+
+      - alert: SlowIncidentAlertDelivery
+        expr: histogram_quantile(0.95, rate(incident_alert_delivery_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: realtime
+          team: realtime
+        annotations:
+          summary: "Slow incident alert delivery"
+          description: "P95 alert delivery time is {{ $value }}s (threshold: 1s)"
+          runbook_url: "https://wiki.xpressops.com/runbooks/slow-alerts"
+        notifications:
+          - slack
+
+      - alert: NoActiveVehicles
+        expr: count(vehicle_last_update_timestamp > (time() - 300)) < 10
+        for: 10m
+        labels:
+          severity: critical
+          component: realtime
+          team: operations
+        annotations:
+          summary: "Very few active vehicles tracked"
+          description: "Only {{ $value }} vehicles active in last 5 minutes (expected: ~275)"
+          runbook_url: "https://wiki.xpressops.com/runbooks/no-vehicles"
+        notifications:
+          - pagerduty
+          - slack
+
+  # =================================================================
+  # BUSINESS METRICS ALERTS
+  # =================================================================
+  - name: business-alerts
+    interval: 5m
+    rules:
+      - alert: HighIncidentRate
+        expr: sum(rate(incidents_created_total[1h])) * 3600 > 50
+        for: 15m
+        labels:
+          severity: warning
+          component: operations
+          team: operations
+        annotations:
+          summary: "High incident creation rate"
+          description: "{{ $value }} incidents created in the last hour (threshold: 50)"
+          runbook_url: "https://wiki.xpressops.com/runbooks/high-incidents"
+        notifications:
+          - slack
+
+      - alert: LowDriverAvailability
+        expr: (count(driver_status == "available") / count(driver_status)) * 100 < 20
+        for: 10m
+        labels:
+          severity: warning
+          component: operations
+          team: operations
+        annotations:
+          summary: "Low driver availability"
+          description: "Only {{ $value }}% drivers available (threshold: 20%)"
+          runbook_url: "https://wiki.xpressops.com/runbooks/low-availability"
+        notifications:
+          - slack
+
+# =================================================================
+# NOTIFICATION CHANNEL CONFIGURATION
+# =================================================================
+notification_channels:
+  - name: slack
+    type: slack
+    settings:
+      url: ${SLACK_WEBHOOK_URL}
+      recipient: "#alerts-production"
+      mention_users: "@oncall"
+      mention_groups: "@sre-team"
+    send_reminder: true
+    frequency: 4h
+
+  - name: pagerduty
+    type: pagerduty
+    settings:
+      integration_key: ${PAGERDUTY_INTEGRATION_KEY}
+      auto_resolve: true
+      severity: critical
+
+  - name: email
+    type: email
+    settings:
+      addresses: "ops-team@xpressops.com;sre-team@xpressops.com"
+      single_email: false
+
+# =================================================================
+# ALERT ESCALATION POLICY
+# =================================================================
+escalation:
+  - level: 1
+    duration: 5m
+    notify:
+      - slack
+
+  - level: 2
+    duration: 15m
+    notify:
+      - slack
+      - email
+
+  - level: 3
+    duration: 30m
+    notify:
+      - slack
+      - email
+      - pagerduty

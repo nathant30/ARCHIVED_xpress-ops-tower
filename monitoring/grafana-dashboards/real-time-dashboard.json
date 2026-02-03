@@ -1,0 +1,419 @@
+{
+  "dashboard": {
+    "title": "XpressOps Real-Time System Monitoring",
+    "tags": ["real-time", "websocket", "signalr", "xpressops", "monitoring"],
+    "timezone": "browser",
+    "schemaVersion": 39,
+    "version": 1,
+    "refresh": "10s",
+    "time": {
+      "from": "now-30m",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Active WebSocket Connections",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "signalr_connections_active",
+            "legendFormat": "Active Connections",
+            "refId": "A"
+          },
+          {
+            "expr": "signalr_connections_max",
+            "legendFormat": "Max Connections",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {
+            "label": "Connections",
+            "format": "short"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "WebSocket Message Rate (msg/sec)",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(signalr_messages_sent_total[1m]))",
+            "legendFormat": "Messages Sent/sec",
+            "refId": "A"
+          },
+          {
+            "expr": "sum(rate(signalr_messages_received_total[1m]))",
+            "legendFormat": "Messages Received/sec",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {
+            "label": "Messages/sec",
+            "format": "short"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "WebSocket Latency (p50, p95, p99)",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(signalr_message_latency_seconds_bucket[5m]))",
+            "legendFormat": "p50",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(signalr_message_latency_seconds_bucket[5m]))",
+            "legendFormat": "p95",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(signalr_message_latency_seconds_bucket[5m]))",
+            "legendFormat": "p99",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {
+            "label": "Latency (ms)",
+            "format": "ms"
+          }
+        ],
+        "thresholds": [
+          {
+            "value": 500,
+            "colorMode": "critical",
+            "op": "gt",
+            "fill": true,
+            "line": true
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Connection Failures",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(signalr_connection_failures_total[5m])) * 60",
+            "legendFormat": "Failures/min",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "label": "Failures/min",
+            "format": "short"
+          }
+        ],
+        "alert": {
+          "name": "High WebSocket Connection Failures",
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [5],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": ["A", "5m", "now"]
+              },
+              "reducer": {
+                "params": [],
+                "type": "avg"
+              },
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "frequency": "1m",
+          "handler": 1,
+          "noDataState": "no_data",
+          "notifications": []
+        }
+      },
+      {
+        "id": 5,
+        "title": "Fleet Location Update Frequency",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 16
+        },
+        "targets": [
+          {
+            "expr": "rate(vehicle_location_updates_total[1m]) * 60",
+            "refId": "A"
+          }
+        ],
+        "unit": "updates/min",
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {"value": 0, "color": "red"},
+            {"value": 100, "color": "orange"},
+            {"value": 1000, "color": "green"}
+          ]
+        }
+      },
+      {
+        "id": 6,
+        "title": "KPI Update Frequency",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 16
+        },
+        "targets": [
+          {
+            "expr": "rate(kpi_updates_total[1m]) * 60",
+            "refId": "A"
+          }
+        ],
+        "unit": "updates/min",
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {"value": 0, "color": "red"},
+            {"value": 1, "color": "orange"},
+            {"value": 6, "color": "green"}
+          ]
+        }
+      },
+      {
+        "id": 7,
+        "title": "Alert Delivery Time",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 16
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(incident_alert_delivery_seconds_bucket[5m]))",
+            "legendFormat": "p95 Delivery Time",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "label": "Time (ms)",
+            "format": "ms"
+          }
+        ],
+        "thresholds": [
+          {
+            "value": 1000,
+            "colorMode": "critical",
+            "op": "gt",
+            "fill": true,
+            "line": true
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Active Vehicles Tracked",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 20
+        },
+        "targets": [
+          {
+            "expr": "count(vehicle_last_update_timestamp > (time() - 300))",
+            "legendFormat": "Active Vehicles (last 5min)",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "label": "Vehicles",
+            "format": "short"
+          }
+        ],
+        "thresholds": [
+          {
+            "value": 275,
+            "colorMode": "custom",
+            "op": "eq",
+            "line": true,
+            "lineColor": "green"
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Message Types Distribution",
+        "type": "piechart",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 20
+        },
+        "targets": [
+          {
+            "expr": "sum by(message_type) (signalr_messages_sent_total)",
+            "legendFormat": "{{message_type}}",
+            "refId": "A"
+          }
+        ],
+        "pieType": "donut",
+        "legend": {
+          "show": true,
+          "values": true,
+          "percentage": true
+        }
+      },
+      {
+        "id": 10,
+        "title": "Vehicle Position Update Lag",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 28
+        },
+        "targets": [
+          {
+            "expr": "time() - vehicle_last_update_timestamp",
+            "legendFormat": "{{vehicle_id}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "label": "Lag (seconds)",
+            "format": "s"
+          }
+        ],
+        "thresholds": [
+          {
+            "value": 10,
+            "colorMode": "critical",
+            "op": "gt",
+            "fill": true,
+            "line": true
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "title": "SignalR Hub Statistics",
+        "type": "table",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 28
+        },
+        "targets": [
+          {
+            "expr": "signalr_hub_invocations_total",
+            "format": "table",
+            "instant": true,
+            "refId": "A"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "renameByName": {
+                "hub": "Hub Name",
+                "method": "Method",
+                "Value": "Total Invocations"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "title": "Reconnection Rate",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 36
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(signalr_reconnections_total[5m])) * 60",
+            "legendFormat": "Reconnections/min",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "label": "Reconnections/min",
+            "format": "short"
+          }
+        ]
+      },
+      {
+        "id": 13,
+        "title": "Connection Duration Distribution",
+        "type": "histogram",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 36
+        },
+        "targets": [
+          {
+            "expr": "sum by(le) (signalr_connection_duration_seconds_bucket)",
+            "format": "heatmap",
+            "refId": "A"
+          }
+        ]
+      }
+    ]
+  },
+  "overwrite": true,
+  "inputs": [],
+  "folderId": 0
+}

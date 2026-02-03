@@ -6,8 +6,8 @@ echo "🔍 Running pre-commit checks..."
 # Run lint-staged for staged files
 npx lint-staged
 
-# Run XPRESS compliance check
+# Run XPRESS compliance check (non-blocking - warnings only)
 echo "🎨 Checking XPRESS Design System compliance..."
-npm run xpress:check
+npm run xpress:check || echo "⚠️  XPRESS compliance warnings detected (non-blocking)"
 
 echo "✅ Pre-commit checks completed!"

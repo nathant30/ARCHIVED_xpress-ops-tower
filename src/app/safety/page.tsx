@@ -1,13 +1,17 @@
-// LEGACY FILE - REPLACED BY MODULAR ARCHITECTURE
-// This file has been replaced by page-refactored.tsx
-// which uses modular components from /components/safety/
-// Original file was 2,185 lines - now modular and maintainable
+// LEGACY FILE - PLACEHOLDER
+// TODO: Implement safety page or restore page-refactored.tsx
 
 'use client';
 
-import SafetyPageRefactored from './page-refactored';
-
-// Simply export the refactored version to maintain compatibility
-const SafetyPage = SafetyPageRefactored;
+const SafetyPage = () => {
+  return (
+    <div className="p-6">
+      <h1 className="text-2xl font-bold">Safety Monitoring</h1>
+      <p className="text-neutral-600 mt-2">
+        Safety monitoring dashboard - under construction
+      </p>
+    </div>
+  );
+};
 
 export default SafetyPage;

@@ -294,6 +294,260 @@ export const healthApi = {
   check: () => apiClient.get('/health'),
 };
 
+// Billing API endpoints for B2B corporate accounts
+export const billingApi = {
+  // Invoices
+  invoices: {
+    // Get all invoices with filtering and pagination
+    getAll: (params?: {
+      status?: string[];
+      dateFrom?: string;
+      dateTo?: string;
+      accountId?: string;
+      minAmount?: number;
+      maxAmount?: number;
+      search?: string;
+      page?: number;
+      limit?: number;
+      sortBy?: string;
+      sortOrder?: 'asc' | 'desc';
+    }) => apiClient.get('/billing/invoices', params),
+
+    // Get invoice by ID
+    getById: (id: string) => apiClient.get(`/billing/invoices/${id}`),
+
+    // Create new invoice
+    create: (invoice: {
+      corporateAccountId: string;
+      billingPeriodStart: string;
+      billingPeriodEnd: string;
+      dueDate: string;
+      lineItems: any[];
+      notes?: string;
+      templateId?: string;
+    }) => apiClient.post('/billing/invoices', invoice),
+
+    // Update invoice
+    update: (id: string, updates: {
+      status?: string;
+      dueDate?: string;
+      notes?: string;
+      lineItems?: any[];
+    }) => apiClient.put(`/billing/invoices/${id}`, updates),
+
+    // Delete/void invoice
+    delete: (id: string) => apiClient.delete(`/billing/invoices/${id}`),
+
+    // Send invoice to customer
+    send: (id: string, recipients?: string[]) =>
+      apiClient.post(`/billing/invoices/${id}/send`, { recipients }),
+
+    // Mark invoice as paid
+    markPaid: (id: string, paymentDetails?: {
+      amount: number;
+      paymentDate: string;
+      paymentMethod: string;
+      referenceNumber?: string;
+      notes?: string;
+    }) => apiClient.post(`/billing/invoices/${id}/mark-paid`, paymentDetails),
+
+    // Send reminder for invoice
+    sendReminder: (id: string) =>
+      apiClient.post(`/billing/invoices/${id}/send-reminder`, {}),
+
+    // Get invoice statistics
+    getStats: (params?: {
+      dateFrom?: string;
+      dateTo?: string;
+      accountId?: string;
+    }) => apiClient.get('/billing/invoices/stats', params),
+
+    // Bulk actions on invoices
+    bulk: (action: {
+      invoiceIds: string[];
+      action: 'send' | 'mark_paid' | 'void' | 'send_reminder';
+      metadata?: any;
+    }) => apiClient.post('/billing/invoices/bulk', action),
+  },
+
+  // Corporate Accounts
+  accounts: {
+    // Get all accounts with filtering and pagination
+    getAll: (params?: {
+      status?: string[];
+      search?: string;
+      minCreditLimit?: number;
+      maxCreditLimit?: number;
+      hasOutstanding?: boolean;
+      page?: number;
+      limit?: number;
+      sortBy?: string;
+      sortOrder?: 'asc' | 'desc';
+    }) => apiClient.get('/billing/accounts', params),
+
+    // Get account by ID
+    getById: (id: string) => apiClient.get(`/billing/accounts/${id}`),
+
+    // Create new account
+    create: (account: {
+      companyName: string;
+      contactPerson: string;
+      contactEmail: string;
+      contactPhone: string;
+      billingAddress: any;
+      creditLimit: number;
+      paymentTermsId?: string;
+      subscriptionId?: string;
+    }) => apiClient.post('/billing/accounts', account),
+
+    // Update account
+    update: (id: string, updates: any) => apiClient.put(`/billing/accounts/${id}`, updates),
+
+    // Delete account
+    delete: (id: string) => apiClient.delete(`/billing/accounts/${id}`),
+
+    // Get account billing history
+    getBillingHistory: (id: string, params?: {
+      dateFrom?: string;
+      dateTo?: string;
+      page?: number;
+      limit?: number;
+    }) => apiClient.get(`/billing/accounts/${id}/billing-history`, params),
+
+    // Get account outstanding invoices
+    getOutstandingInvoices: (id: string) =>
+      apiClient.get(`/billing/accounts/${id}/outstanding-invoices`),
+  },
+
+  // Subscriptions
+  subscriptions: {
+    // Get all subscriptions
+    getAll: (params?: {
+      accountId?: string;
+      status?: string[];
+      planType?: string[];
+      page?: number;
+      limit?: number;
+    }) => apiClient.get('/billing/subscriptions', params),
+
+    // Get subscription by ID
+    getById: (id: string) => apiClient.get(`/billing/subscriptions/${id}`),
+
+    // Create new subscription
+    create: (subscription: {
+      corporateAccountId: string;
+      planType: string;
+      planName: string;
+      startDate: string;
+      pricePerRide: number;
+      monthlyMinimum?: number;
+      baseFee?: number;
+      autoRenew: boolean;
+    }) => apiClient.post('/billing/subscriptions', subscription),
+
+    // Update subscription
+    update: (id: string, updates: any) => apiClient.put(`/billing/subscriptions/${id}`, updates),
+
+    // Cancel subscription
+    cancel: (id: string, cancelDate?: string) =>
+      apiClient.post(`/billing/subscriptions/${id}/cancel`, { cancelDate }),
+
+    // Renew subscription
+    renew: (id: string) => apiClient.post(`/billing/subscriptions/${id}/renew`, {}),
+  },
+
+  // Payment Terms
+  paymentTerms: {
+    // Get all payment terms
+    getAll: (params?: {
+      isActive?: boolean;
+      page?: number;
+      limit?: number;
+    }) => apiClient.get('/billing/payment-terms', params),
+
+    // Get payment terms by ID
+    getById: (id: string) => apiClient.get(`/billing/payment-terms/${id}`),
+
+    // Create payment terms
+    create: (terms: {
+      name: string;
+      description?: string;
+      dueDays: number;
+      gracePeriodDays: number;
+      lateFeeType: 'percentage' | 'fixed';
+      lateFeeAmount: number;
+      isDefault?: boolean;
+    }) => apiClient.post('/billing/payment-terms', terms),
+
+    // Update payment terms
+    update: (id: string, updates: any) => apiClient.put(`/billing/payment-terms/${id}`, updates),
+
+    // Delete payment terms
+    delete: (id: string) => apiClient.delete(`/billing/payment-terms/${id}`),
+  },
+
+  // Reconciliation
+  reconciliation: {
+    // Get unreconciled transactions
+    getUnreconciled: (params?: {
+      dateFrom?: string;
+      dateTo?: string;
+      accountId?: string;
+      status?: string[];
+      page?: number;
+      limit?: number;
+    }) => apiClient.get('/billing/reconciliation/unreconciled', params),
+
+    // Get reconciliation statistics
+    getStats: () => apiClient.get('/billing/reconciliation/stats'),
+
+    // Reconcile transaction
+    reconcile: (transactionId: string, data: {
+      invoiceId?: string;
+      notes?: string;
+    }) => apiClient.post(`/billing/reconciliation/${transactionId}/reconcile`, data),
+
+    // Mark discrepancy
+    markDiscrepancy: (transactionId: string, data: {
+      reason: string;
+      notes?: string;
+    }) => apiClient.post(`/billing/reconciliation/${transactionId}/discrepancy`, data),
+
+    // Export reconciliation report
+    exportReport: (params?: {
+      dateFrom?: string;
+      dateTo?: string;
+      format?: 'csv' | 'xlsx' | 'pdf';
+    }) => apiClient.get('/billing/reconciliation/export', params),
+  },
+
+  // Dashboard
+  dashboard: {
+    // Get billing KPIs
+    getKPIs: (params?: {
+      dateFrom?: string;
+      dateTo?: string;
+    }) => apiClient.get('/billing/dashboard/kpis', params),
+
+    // Get recent invoices
+    getRecentInvoices: (limit?: number) =>
+      apiClient.get('/billing/dashboard/recent-invoices', { limit }),
+
+    // Get upcoming due invoices
+    getUpcomingDue: (days?: number) =>
+      apiClient.get('/billing/dashboard/upcoming-due', { days }),
+
+    // Get overdue accounts
+    getOverdueAccounts: () => apiClient.get('/billing/dashboard/overdue-accounts'),
+
+    // Get revenue chart data
+    getRevenueChart: (params?: {
+      period: 'monthly' | 'quarterly';
+      months?: number;
+    }) => apiClient.get('/billing/dashboard/revenue-chart', params),
+  },
+};
+
 // Utility functions for common operations
 export const apiUtils = {
   // Format error messages from API responses
@@ -353,5 +607,6 @@ export default {
   analyticsApi,
   alertsApi,
   healthApi,
+  billingApi,
   apiUtils,
 };

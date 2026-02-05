@@ -1,6 +1,6 @@
 /**
  * Feature Flags Utility
- * Centralized feature flag management for Agent 10 - Critical UIs
+ * Centralized feature flag management
  */
 
 export const FEATURE_FLAGS = {
@@ -8,6 +8,12 @@ export const FEATURE_FLAGS = {
   groundOps: process.env.NEXT_PUBLIC_FEATURE_GROUND_OPS === 'true',
   incidents: process.env.NEXT_PUBLIC_FEATURE_INCIDENTS === 'true',
   shifts: process.env.NEXT_PUBLIC_FEATURE_SHIFTS === 'true',
+  bonds: process.env.NEXT_PUBLIC_FEATURE_BONDS === 'true',
+  customerPromos: process.env.NEXT_PUBLIC_FEATURE_CUSTOMER_PROMOS === 'true',
+  dashcam: process.env.NEXT_PUBLIC_FEATURE_DASHCAM === 'true',
+  driverIncentives: process.env.NEXT_PUBLIC_FEATURE_DRIVER_INCENTIVES === 'true',
+  trustScore: process.env.NEXT_PUBLIC_FEATURE_TRUST_SCORE === 'true',
+  identityVerification: process.env.NEXT_PUBLIC_FEATURE_IDENTITY_VERIFICATION === 'true',
 } as const;
 
 export type FeatureFlag = keyof typeof FEATURE_FLAGS;

@@ -3,9 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import RidesharingSidebar from '@/components/features/RidesharingSidebar';
-import { RefreshCw, Menu, X, Loader2, User, Bell, ChevronDown, LogOut, Settings, UserCircle } from 'lucide-react';
+import { RefreshCw, Menu, X, Loader2, User, Bell, ChevronDown, LogOut, Settings, UserCircle, Shield } from 'lucide-react';
 import { useServiceType } from '@/contexts/ServiceTypeContext';
-import { useAuth } from '@/hooks/useAuth';
+import { useEnhancedAuth } from '@/hooks/useEnhancedAuth';
 import { logger } from '@/lib/security/productionLogger';
 
 interface HealthStatus {
@@ -27,7 +27,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { selectedServiceType, setSelectedServiceType, serviceTypes } = useServiceType();
-  const { user, isAuthenticated, isLoading: authLoading, logout } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading, logout } = useEnhancedAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [sidebarHovered, setSidebarHovered] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -115,6 +115,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     const sectionMap: { [key: string]: string } = {
       'dashboard': 'Dashboard',
       'live-map': 'Live Map',
+      'regions': 'Regions',
       'bookings': 'Bookings',
       'drivers': 'Drivers',
       'passengers': 'Passengers',
@@ -164,6 +165,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
         return 'Dashboard';
       case 'live-map':
         return 'Live Map';
+      case 'regions':
+        return 'Regional Management';
       case 'bookings':
         return 'Bookings';
       case 'drivers':
@@ -179,7 +182,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
       case 'safety':
         return 'Safety & Security';
       case 'fraud-protect':
-        return 'Fraud Protection';
+        return 'Fraud Management';
       case 'reports':
         return 'Reports & Analytics';
       case 'support':
@@ -199,6 +202,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
         return 'Real-time overview of operations and key performance indicators';
       case 'live-map':
         return 'Real-time vehicle tracking and demand heatmap visualization';
+      case 'regions':
+        return 'Manage service regions, coverage areas, and regional operations';
       case 'bookings':
         return 'Trip management and booking analytics';
       case 'drivers':
@@ -214,7 +219,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
       case 'safety':
         return 'Safety protocols and incident reporting system';
       case 'fraud-protect':
-        return 'Advanced fraud detection and prevention system';
+        return 'Comprehensive fraud detection, review, and configuration';
       case 'reports':
         return 'Business intelligence and operational analytics';
       case 'support':
@@ -247,7 +252,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
 
   return (
-    <div className="min-h-screen bg-neutral-50 flex">
+    <div className="h-screen bg-neutral-50 flex overflow-hidden">
       {/* Desktop Sidebar Navigation */}
       <div 
         className="hidden md:block"
@@ -288,10 +293,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
       )}
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top Header - Hide for pages with custom headers */}
+      <div className="flex-1 flex flex-col h-full">
+        {/* Top Header - Compact Design */}
         {!['bookings', 'live-map', 'safety'].includes(pathname.substring(1)) && (
-          <header className="bg-white shadow-sm border-b border-gray-100 px-4 md:px-6 py-2 md:py-3">
+          <header className="bg-white shadow-sm border-b border-gray-100 px-3 md:px-4 py-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 {/* Mobile menu button */}
@@ -303,7 +308,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 </button>
                 
                 <div>
-                  <h1 className="text-lg md:text-xl font-bold text-gray-900">{getPageTitle()}</h1>
+                  <h1 className="text-lg md:text-xl font-bold text-gray-900 flex items-center gap-3">
+                    {pathname.substring(1) === 'fraud-protect' && <Shield className="w-6 h-6 md:w-7 md:h-7 text-red-600" />}
+                    {getPageTitle()}
+                  </h1>
                   <p className="text-gray-600 text-xs md:text-sm">{getPageDescription()}</p>
                 </div>
               </div>
@@ -336,7 +344,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 
                 <button
                   onClick={refreshData}
-                  className="flex items-center space-x-1 px-2 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs font-medium shadow-sm"
+                  className="xpress-btn xpress-btn-primary flex items-center space-x-1 px-3 py-2 text-xs font-medium"
                 >
                   <RefreshCw className="w-3 h-3" />
                   <span className="hidden sm:inline">Refresh</span>
@@ -353,7 +361,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     </div>
                     <div className="hidden md:block text-left">
                       <p className="text-sm font-medium text-gray-900">{user ? `${user.firstName} ${user.lastName}` : 'Demo Admin'}</p>
-                      <p className="text-xs text-gray-500">{user?.role || 'admin'}</p>
+                      <p className="text-xs text-gray-500">{user?.roles?.length > 0 ? user.roles[0].role?.displayName || 'admin' : 'admin'}</p>
                     </div>
                     <ChevronDown className="w-4 h-4 text-gray-400" />
                   </button>
@@ -368,7 +376,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                           </div>
                           <div>
                             <p className="text-sm font-medium text-gray-900">{user ? `${user.firstName} ${user.lastName}` : 'Demo Admin'}</p>
-                            <p className="text-xs text-gray-500">{user?.role || 'admin'}</p>
+                            <p className="text-xs text-gray-500">{user?.roles?.length > 0 ? user.roles[0].role?.displayName || 'admin' : 'admin'}</p>
                           </div>
                         </div>
                       </div>
@@ -416,13 +424,13 @@ export default function AppLayout({ children }: AppLayoutProps) {
           </header>
         )}
 
-        {/* Main Page Content */}
-        <main className="flex-1 overflow-auto p-3 md:p-6">
+        {/* Main Page Content - Compact Layout */}
+        <main className="flex-1 overflow-auto p-2 md:p-4">
           {children}
         </main>
 
-        {/* Footer */}
-        <footer className="bg-white border-t border-gray-100 py-3 md:py-4">
+        {/* Footer - Fixed at bottom */}
+        <footer className="bg-white border-t border-gray-100 py-3 md:py-4 flex-shrink-0">
           <div className="px-4 md:px-8 text-center text-xs md:text-sm text-gray-600">
             <div className="flex flex-col md:flex-row items-center justify-center space-y-2 md:space-y-0 md:space-x-6">
               <div className="flex items-center space-x-2">

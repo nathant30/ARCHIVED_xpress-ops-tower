@@ -1,30 +1,50 @@
-# Production RBAC+ABAC API Server
-FROM node:20-alpine
+# Multi-stage build for Next.js standalone
+FROM node:20-alpine AS base
 
+# Install dependencies only when needed
+FROM base AS deps
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
+RUN npm ci
 
-# Install dependencies  
-RUN npm ci --only=production
+# Build stage
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
 
-# Install SQLite
-RUN apk add --no-cache sqlite curl
+# Build Next.js application
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+RUN npm run build
 
-# Copy application files
-COPY production-api-server.js ./
-COPY database/setup-rbac-sqlite.sql ./database/
+# Production stage
+FROM base AS runner
+WORKDIR /app
 
-# Create database
-RUN sqlite3 production-authz.db < database/setup-rbac-sqlite.sql
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 
-# Expose port
-EXPOSE 4001
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
-  CMD curl -f http://localhost:4001/healthz || exit 1
+# Copy standalone build output
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
 
-# Run application
-CMD ["node", "production-api-server.js"]
+# Set correct permissions
+RUN chown -R nextjs:nodejs /app
+
+USER nextjs
+
+EXPOSE 3000
+
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+# Run the Next.js standalone server
+CMD ["node", "server.js"]

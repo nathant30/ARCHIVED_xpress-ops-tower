@@ -481,13 +481,11 @@ class AnomalyDetectionEngine {
     };
 
     this.recentAnomalies.push(alert);
-    
+
     // Keep only last 1000 anomalies
     if (this.recentAnomalies.length > 1000) {
       this.recentAnomalies = this.recentAnomalies.slice(-1000);
     }
-
-    `);
   }
 
   private determineAnomalyType(dimensions: AnomalyScore['dimensions']): AnomalyAlert['type'] {

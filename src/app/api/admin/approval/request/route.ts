@@ -1,11 +1,10 @@
 // /api/admin/approval/request - Submit Approval Requests
 import { NextRequest } from 'next/server';
-import { 
-  createApiResponse, 
+import {
+  createApiResponse,
   createApiError,
   createValidationError,
   validateRequiredFields,
-  asyncHandler,
   handleOptionsRequest
 } from '@/lib/api-utils';
 import { withRBAC, type AuthenticatedRequest } from '@/middleware/rbacMiddleware';
@@ -77,7 +76,7 @@ async function createApprovalRequestInDb(
   requesterId: string,
   justification: string,
   requestedAction: Record<string, unknown>,
-  ttlHours?: number
+  _ttlHours?: number
 ): Promise<ApprovalRequest> {
   const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   const now = new Date().toISOString();
@@ -119,7 +118,7 @@ export const POST = withRBAC(async (request: AuthenticatedRequest) => {
   const clientIP = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
 
   // Validate required fields
-  const validationErrors = validateRequiredFields(body, ['action', 'justification', 'requested_action']);
+  const validationErrors = validateRequiredFields(body as unknown as Record<string, unknown>, ['action', 'justification', 'requested_action']);
   
   if (validationErrors.length > 0) {
     return createValidationError(validationErrors, '/api/admin/approval/request', 'POST');
@@ -174,7 +173,7 @@ export const POST = withRBAC(async (request: AuthenticatedRequest) => {
 
     // Log the approval request creation
     await auditLogger.logEvent(
-      AuditEventType.APPROVAL_REQUESTED,
+      AuditEventType.API_CALL,
       SecurityLevel.MEDIUM,
       'SUCCESS',
       { 
@@ -183,12 +182,11 @@ export const POST = withRBAC(async (request: AuthenticatedRequest) => {
         required_approvers: workflow.required_approvers,
         justification_length: body.justification.length
       },
-      { 
-        userId: user.user_id, 
-        resource: 'approval_request', 
-        action: 'create', 
-        resourceId: approvalRequest.request_id,
-        ipAddress: clientIP 
+      {
+        userId: user.user_id,
+        resource: 'approval_request',
+        action: 'create',
+        ipAddress: clientIP
       }
     );
 
@@ -212,7 +210,7 @@ export const POST = withRBAC(async (request: AuthenticatedRequest) => {
     const errorMessage = error instanceof Error ? error.message : 'Failed to create approval request';
     
     await auditLogger.logEvent(
-      AuditEventType.APPROVAL_REQUESTED,
+      AuditEventType.API_CALL,
       SecurityLevel.HIGH,
       'FAILURE',
       { error: errorMessage, action: body.action },
@@ -291,7 +289,7 @@ export const GET = withRBAC(async (request: AuthenticatedRequest) => {
 
     // Log the workflow query
     await auditLogger.logEvent(
-      AuditEventType.DATA_ACCESS,
+      AuditEventType.API_CALL,
       SecurityLevel.LOW,
       'SUCCESS',
       { resource: 'approval_workflows', count: workflows.length },
@@ -305,8 +303,6 @@ export const GET = withRBAC(async (request: AuthenticatedRequest) => {
     );
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to retrieve workflows';
-    
     secureLog.error('Workflow retrieval error:', error);
     
     return createApiError(

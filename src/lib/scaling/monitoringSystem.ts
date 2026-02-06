@@ -96,8 +96,8 @@ class MonitoringSystem extends EventEmitter {
   private notificationChannels: NotificationChannel[] = [];
   private lastAlertTime: Record<string, number> = {};
   private isRunning: boolean = false;
-  private metricsInterval?: NodeJS.Timeout;
-  private alertCheckInterval?: NodeJS.Timeout;
+  private metricsInterval?: NodeJS.Timeout | undefined;
+  private alertCheckInterval?: NodeJS.Timeout | undefined;
 
   private constructor() {
     super();
@@ -234,7 +234,7 @@ class MonitoringSystem extends EventEmitter {
         name: 'Slack Alerts Channel',
         config: {
           url: 'https://hooks.slack.com/services/...',
-          token: process.env.SLACK_WEBHOOK_TOKEN
+          ...(process.env.SLACK_WEBHOOK_TOKEN ? { token: process.env.SLACK_WEBHOOK_TOKEN } : {})
         },
         enabled: true,
         severityFilter: ['medium', 'high', 'critical']
@@ -438,21 +438,23 @@ class MonitoringSystem extends EventEmitter {
 
   private async sendEmailNotification(channel: NotificationChannel, alert: Alert): Promise<void> {
     // In a real implementation, this would integrate with an email service
-    }: ${alert.message}`);
+    console.log(`Email notification sent to ${channel.config.recipients?.join(', ')}: ${alert.message}`);
   }
 
-  private async sendSlackNotification(channel: NotificationChannel, alert: Alert): Promise<void> {
+  private async sendSlackNotification(_channel: NotificationChannel, alert: Alert): Promise<void> {
     // In a real implementation, this would send to Slack webhook
     const emoji = alert.severity === 'critical' ? '🚨' : alert.severity === 'high' ? '⚠️' : '📊';
-    }
+    console.log(`Slack notification sent: ${emoji} ${alert.message}`);
+  }
 
   private async sendWebhookNotification(channel: NotificationChannel, alert: Alert): Promise<void> {
     // In a real implementation, this would make HTTP POST to webhook URL
-    }
+    console.log(`Webhook notification sent to ${channel.config.url}: ${alert.message}`);
+  }
 
   private async sendSMSNotification(channel: NotificationChannel, alert: Alert): Promise<void> {
     // In a real implementation, this would integrate with SMS service
-    }: ${alert.message}`);
+    console.log(`SMS notification sent to ${channel.config.phoneNumbers?.join(', ')}: ${alert.message}`);
   }
 
   start(): void {
@@ -489,7 +491,7 @@ class MonitoringSystem extends EventEmitter {
 
   // Public API methods
   getLatestMetrics(): SystemMetrics | null {
-    return this.metrics.length > 0 ? this.metrics[this.metrics.length - 1] : null;
+    return this.metrics.length > 0 ? (this.metrics[this.metrics.length - 1] ?? null) : null;
   }
 
   getMetricsHistory(duration: number = 3600000): SystemMetrics[] { // Default 1 hour
@@ -525,7 +527,10 @@ class MonitoringSystem extends EventEmitter {
   updateAlertRule(id: string, updates: Partial<AlertRule>): boolean {
     const ruleIndex = this.alertRules.findIndex(r => r.id === id);
     if (ruleIndex >= 0) {
-      this.alertRules[ruleIndex] = { ...this.alertRules[ruleIndex], ...updates };
+      const existingRule = this.alertRules[ruleIndex];
+      if (existingRule) {
+        this.alertRules[ruleIndex] = { ...existingRule, ...updates } as AlertRule;
+      }
       return true;
     }
     return false;
@@ -544,7 +549,10 @@ class MonitoringSystem extends EventEmitter {
   updateNotificationChannel(id: string, updates: Partial<NotificationChannel>): boolean {
     const channelIndex = this.notificationChannels.findIndex(c => c.id === id);
     if (channelIndex >= 0) {
-      this.notificationChannels[channelIndex] = { ...this.notificationChannels[channelIndex], ...updates };
+      const existingChannel = this.notificationChannels[channelIndex];
+      if (existingChannel) {
+        this.notificationChannels[channelIndex] = { ...existingChannel, ...updates } as NotificationChannel;
+      }
       return true;
     }
     return false;

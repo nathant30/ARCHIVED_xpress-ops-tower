@@ -1,13 +1,12 @@
 // /api/admin/temporary-access - Temporary Access Token Management
 import { NextRequest } from 'next/server';
 import jwt from 'jsonwebtoken';
-import { 
-  createApiResponse, 
+import {
+  createApiResponse,
   createApiError,
   createValidationError,
   validateRequiredFields,
   parseQueryParams,
-  asyncHandler,
   handleOptionsRequest
 } from '@/lib/api-utils';
 import { withRBAC, type AuthenticatedRequest } from '@/middleware/rbacMiddleware';
@@ -205,12 +204,10 @@ async function createTemporaryAccessTokenInDb(
 }
 
 async function revokeTemporaryAccessTokenInDb(
-  tokenId: string,
-  revokedBy: string,
-  reason?: string
+  _tokenId: string,
+  _revokedBy: string,
+  _reason?: string
 ): Promise<void> {
-  const now = new Date().toISOString();
-  
   // Mock database update - in production, update temporary_access_tokens table
   }
 
@@ -257,7 +254,7 @@ export const GET = withRBAC(async (request: AuthenticatedRequest) => {
 
     // Log the temporary access tokens access
     await auditLogger.logEvent(
-      AuditEventType.DATA_ACCESS,
+      AuditEventType.API_CALL,
       SecurityLevel.LOW,
       'SUCCESS',
       { 
@@ -297,7 +294,7 @@ export const GET = withRBAC(async (request: AuthenticatedRequest) => {
     const errorMessage = error instanceof Error ? error.message : 'Failed to retrieve temporary access tokens';
     
     await auditLogger.logEvent(
-      AuditEventType.DATA_ACCESS,
+      AuditEventType.API_CALL,
       SecurityLevel.HIGH,
       'FAILURE',
       { error: errorMessage, resource: 'temporary_access_tokens' },
@@ -342,7 +339,7 @@ export const POST = withRBAC(async (request: AuthenticatedRequest) => {
   const clientIP = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
 
   // Validate required fields
-  const validationErrors = validateRequiredFields(body, ['user_id', 'permissions', 'ttl_seconds', 'justification']);
+  const validationErrors = validateRequiredFields(body as unknown as Record<string, unknown>, ['user_id', 'permissions', 'ttl_seconds', 'justification']);
   
   if (validationErrors.length > 0) {
     return createValidationError(validationErrors, '/api/admin/temporary-access', 'POST');
@@ -429,7 +426,7 @@ export const POST = withRBAC(async (request: AuthenticatedRequest) => {
 
     // Log the temporary access token creation
     await auditLogger.logEvent(
-      AuditEventType.PERMISSION_GRANTED,
+      AuditEventType.CONFIG_CHANGE,
       SecurityLevel.HIGH,
       'SUCCESS',
       { 
@@ -439,12 +436,11 @@ export const POST = withRBAC(async (request: AuthenticatedRequest) => {
         expires_at: tempToken.expires_at,
         justification_length: body.justification.length
       },
-      { 
-        userId: user.user_id, 
-        resource: 'temporary_access_token', 
-        action: 'create', 
-        resourceId: tempToken.token_id,
-        ipAddress: clientIP 
+      {
+        userId: user.user_id,
+        resource: 'temporary_access_token',
+        action: 'create',
+        ipAddress: clientIP
       }
     );
 
@@ -468,7 +464,7 @@ export const POST = withRBAC(async (request: AuthenticatedRequest) => {
     const errorMessage = error instanceof Error ? error.message : 'Failed to create temporary access token';
     
     await auditLogger.logEvent(
-      AuditEventType.PERMISSION_GRANTED,
+      AuditEventType.CONFIG_CHANGE,
       SecurityLevel.HIGH,
       'FAILURE',
       { error: errorMessage, target_user_id: body.user_id, permissions: body.permissions },
@@ -512,7 +508,7 @@ export const DELETE = withRBAC(async (request: AuthenticatedRequest) => {
   const clientIP = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
 
   // Validate required fields
-  const validationErrors = validateRequiredFields(body, ['token_id']);
+  const validationErrors = validateRequiredFields(body as unknown as Record<string, unknown>, ['token_id']);
   
   if (validationErrors.length > 0) {
     return createValidationError(validationErrors, '/api/admin/temporary-access', 'DELETE');
@@ -530,19 +526,18 @@ export const DELETE = withRBAC(async (request: AuthenticatedRequest) => {
 
     // Log the temporary access token revocation
     await auditLogger.logEvent(
-      AuditEventType.PERMISSION_REVOKED,
+      AuditEventType.CONFIG_CHANGE,
       SecurityLevel.HIGH,
       'SUCCESS',
       { 
         token_id: body.token_id,
         reason: body.reason || 'Not specified'
       },
-      { 
-        userId: user.user_id, 
-        resource: 'temporary_access_token', 
-        action: 'revoke', 
-        resourceId: body.token_id,
-        ipAddress: clientIP 
+      {
+        userId: user.user_id,
+        resource: 'temporary_access_token',
+        action: 'revoke',
+        ipAddress: clientIP
       }
     );
 
@@ -561,11 +556,11 @@ export const DELETE = withRBAC(async (request: AuthenticatedRequest) => {
     const errorMessage = error instanceof Error ? error.message : 'Failed to revoke temporary access token';
     
     await auditLogger.logEvent(
-      AuditEventType.PERMISSION_REVOKED,
+      AuditEventType.CONFIG_CHANGE,
       SecurityLevel.HIGH,
       'FAILURE',
       { error: errorMessage, token_id: body.token_id },
-      { userId: user.user_id, resource: 'temporary_access_token', action: 'revoke', resourceId: body.token_id, ipAddress: clientIP }
+      { userId: user.user_id, resource: 'temporary_access_token', action: 'revoke', ipAddress: clientIP }
     );
 
     secureLog.error('Temporary access token revocation error:', error);

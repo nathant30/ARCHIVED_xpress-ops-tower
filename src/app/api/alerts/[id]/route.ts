@@ -13,13 +13,17 @@ import { IncidentStatus } from '@/types';
 
 
 // GET /api/alerts/[id] - Get alert by ID
-export const GET = asyncHandler(async (request: NextRequest, context?: { params: { id: string } }) => {
+export const GET = asyncHandler(async (_request: NextRequest, context?: { params: Record<string, string> }) => {
   if (!context?.params) {
     return createApiError('Missing route parameters', 'MISSING_PARAMS', 400);
   }
   const { params } = context;
   const { id } = params;
-  
+
+  if (!id) {
+    return createApiError('Missing alert ID', 'MISSING_ID', 400);
+  }
+
   const incident = MockDataService.getIncidentById(id);
   
   if (!incident) {
@@ -29,8 +33,8 @@ export const GET = asyncHandler(async (request: NextRequest, context?: { params:
   // Enrich with related data
   const driver = incident.driverId ? MockDataService.getDriverById(incident.driverId) : null;
   const booking = incident.bookingId ? MockDataService.getBookingById(incident.bookingId) : null;
-  const driverLocation = incident.driverId ? 
-    MockDataService.getDriverLocations({ driverId: incident.driverId })[0] : null;
+  const driverLocation = incident.driverId ?
+    MockDataService.getDriverLocations().find(loc => loc.driverId === incident.driverId) : null;
   
   return createApiResponse({
     alert: incident,
@@ -59,12 +63,16 @@ export const GET = asyncHandler(async (request: NextRequest, context?: { params:
 });
 
 // PATCH /api/alerts/[id] - Update alert status and details
-export const PATCH = asyncHandler(async (request: NextRequest, context?: { params: { id: string } }) => {
+export const PATCH = asyncHandler(async (request: NextRequest, context?: { params: Record<string, string> }) => {
   if (!context?.params) {
     return createApiError('Missing route parameters', 'MISSING_PARAMS', 400);
   }
   const { params } = context;
   const { id } = params;
+
+  if (!id) {
+    return createApiError('Missing alert ID', 'MISSING_ID', 400);
+  }
   const body = await request.json();
   
   // Check if alert exists
@@ -188,12 +196,16 @@ export const PATCH = asyncHandler(async (request: NextRequest, context?: { param
 });
 
 // DELETE /api/alerts/[id] - Close/archive alert
-export const DELETE = asyncHandler(async (request: NextRequest, context?: { params: { id: string } }) => {
+export const DELETE = asyncHandler(async (_request: NextRequest, context?: { params: Record<string, string> }) => {
   if (!context?.params) {
     return createApiError('Missing route parameters', 'MISSING_PARAMS', 400);
   }
   const { params } = context;
-  const { id } = params;
+  const { id} = params;
+
+  if (!id) {
+    return createApiError('Missing alert ID', 'MISSING_ID', 400);
+  }
   
   // Check if alert exists
   const existingIncident = MockDataService.getIncidentById(id);

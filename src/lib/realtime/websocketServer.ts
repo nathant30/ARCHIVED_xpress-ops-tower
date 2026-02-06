@@ -215,7 +215,7 @@ class WebSocketServer {
 
       // Handle disconnection
       socket.on('disconnect', (reason) => {
-        `);
+        console.log(`Client disconnected: ${socket.id}, reason: ${reason}`);
         this.clients.delete(socket.id);
       });
     });
@@ -448,13 +448,16 @@ class WebSocketServer {
     for (const region of regions) {
       const driverCount = Math.floor(Math.random() * 50) + 20;
       for (let i = 0; i < driverCount; i++) {
+        const rand1 = Math.random();
+        const rand2 = Math.random();
+        const rand3 = Math.random();
         drivers.push({
           id: `${region.name}_driver_${i}`,
           lat: region.bounds.lat[0] + Math.random() * (region.bounds.lat[1] - region.bounds.lat[0]),
           lng: region.bounds.lng[0] + Math.random() * (region.bounds.lng[1] - region.bounds.lng[0]),
-          status: Math.random() > 0.15 ? 'active' : Math.random() > 0.8 ? 'fraud_flagged' : 'inactive',
+          status: rand1 > 0.15 ? 'active' : rand2 > 0.8 ? 'fraud_flagged' : 'inactive',
           region: region.name,
-          riskLevel: Math.random() > 0.9 ? 'high' : Math.random() > 0.7 ? 'medium' : 'low'
+          riskLevel: rand3 > 0.9 ? 'high' : rand3 > 0.7 ? 'medium' : 'low'
         });
       }
     }

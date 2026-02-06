@@ -85,7 +85,7 @@ const postDriversV1 = requirePermission('manage_users')(async (request: NextRequ
     'primaryService'
   ];
   
-  const validationErrors = validateRequiredFields(body, requiredFields);
+  const validationErrors = validateRequiredFields(body as unknown as Record<string, unknown>, requiredFields);
   
   // Additional validation
   if (body.services && !body.services.includes(body.primaryService)) {

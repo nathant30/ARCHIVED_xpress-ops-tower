@@ -11,7 +11,7 @@ import {
 import { authManager } from '@/lib/auth';
 import { MockDataService } from '@/lib/mockData';
 import { auditLogger, AuditEventType, SecurityLevel } from '@/lib/security/auditLogger';
-import { secureLog, validateInput } from '@/lib/security/securityUtils';
+import { secureLog } from '@/lib/security/securityUtils';
 
 interface LoginRequest {
   email: string;
@@ -59,7 +59,7 @@ export const POST = asyncHandler(async (request: NextRequest) => {
   const userAgent = request.headers.get('user-agent') || 'unknown';
 
   // Validate required fields
-  const validationErrors = validateRequiredFields(body, ['email', 'password']);
+  const validationErrors = validateRequiredFields(body as unknown as Record<string, unknown>, ['email', 'password']);
   
   if (validationErrors.length > 0) {
     return createValidationError(validationErrors, '/api/auth/login', 'POST');

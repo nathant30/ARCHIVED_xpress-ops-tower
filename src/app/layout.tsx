@@ -7,6 +7,11 @@ import { ServiceTypeProvider } from '@/contexts/ServiceTypeContext';
 import { EnhancedAuthProvider } from '@/hooks/useEnhancedAuth';
 import { RBACProvider } from '@/hooks/useRBAC';
 
+// Force all pages to be dynamically rendered (skip static generation)
+// This prevents build-time Redis initialization errors
+export const dynamic = 'force-dynamic';
+export const dynamicParams = true;
+
 const inter = Inter({
   subsets: ['latin'],
   variable: '--font-inter',

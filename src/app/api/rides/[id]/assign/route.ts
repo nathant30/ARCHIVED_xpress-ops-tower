@@ -31,7 +31,7 @@ export const PATCH = asyncHandler(async (request: NextRequest, { params }: { par
   
   // Validate required fields
   const requiredFields = ['driverId', 'operatorId'];
-  const validationErrors = validateRequiredFields(body, requiredFields);
+  const validationErrors = validateRequiredFields(body as unknown as Record<string, unknown>, requiredFields);
   
   if (validationErrors.length > 0) {
     return createValidationError(validationErrors, `/api/rides/${rideId}/assign`, 'PATCH');

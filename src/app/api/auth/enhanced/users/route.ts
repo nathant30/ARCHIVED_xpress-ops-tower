@@ -82,7 +82,7 @@ export const POST = withEnhancedAuth({
     
     // Validate required fields
     const requiredFields = ['email', 'firstName', 'lastName', 'roles'];
-    const validationErrors = validateRequiredFields(body, requiredFields);
+    const validationErrors = validateRequiredFields(body as unknown as Record<string, unknown>, requiredFields);
     
     // Additional validation
     if (!isValidEmail(body.email)) {
@@ -245,8 +245,8 @@ export const PUT = withEnhancedAuth({
 // Helper Functions
 
 async function getUsersWithRoles(
-  filters: any, 
-  pagination: any
+  _filters: any,
+  _pagination: any
 ): Promise<UserWithRolesView[]> {
   // Mock implementation - in production this would query the v_users_with_roles view
   return [
@@ -269,8 +269,7 @@ async function getUsersWithRoles(
           roleName: 'ops_manager',
           roleDisplayName: 'Operations Manager',
           roleLevel: 30,
-          assignedAt: new Date(),
-          validUntil: undefined
+          assignedAt: new Date()
         }
       ],
       permissions: ['assign_driver', 'view_live_map', 'manage_queue']
@@ -289,8 +288,8 @@ function maskUserData(users: UserWithRolesView[], piiScope: string): UserWithRol
 }
 
 function maskEmail(email: string): string {
-  const [username, domain] = email.split('@');
-  const maskedUsername = username.length > 2 
+  const [username = '', domain = ''] = email.split('@');
+  const maskedUsername = username.length > 2
     ? username[0] + '*'.repeat(username.length - 2) + username[username.length - 1]
     : '*'.repeat(username.length);
   return `${maskedUsername}@${domain}`;
@@ -357,8 +356,8 @@ function validateRegionalAccess(
 }
 
 function validateUserUpdates(
-  updates: UserUpdateRequest, 
-  updatingUser: EnhancedUser
+  updates: UserUpdateRequest,
+  _updatingUser: EnhancedUser
 ): any[] {
   const errors = [];
   
@@ -437,7 +436,7 @@ async function updateUser(userId: string, updates: UserUpdateRequest, updatedBy:
   };
 }
 
-async function findUserByEmail(email: string): Promise<any | null> {
+async function findUserByEmail(_email: string): Promise<any | null> {
   // Mock implementation
   return null;
 }
@@ -456,7 +455,7 @@ async function findUserById(userId: string): Promise<any | null> {
 function extractUserIdFromPath(request: NextRequest): string | null {
   const pathSegments = request.nextUrl.pathname.split('/');
   const userIndex = pathSegments.indexOf('users');
-  return userIndex >= 0 && pathSegments[userIndex + 1] ? pathSegments[userIndex + 1] : null;
+  return userIndex >= 0 && pathSegments[userIndex + 1] ? (pathSegments[userIndex + 1] ?? null) : null;
 }
 
 async function auditUserAction(

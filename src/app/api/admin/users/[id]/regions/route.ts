@@ -4,7 +4,6 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { query, transaction } from '@/lib/db';
-import { requireSuperAdmin, buildAccessContext } from '@/middleware/accessContext';
 
 interface Region {
   id: string;
@@ -30,7 +29,7 @@ interface Override {
 
 // GET /api/admin/users/{id}/regions
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -82,7 +81,7 @@ export async function GET(
       SELECT capability
       FROM regional_capabilities
       WHERE role_key = $1
-    `, [user.role]);
+    `, [user!.role]);
     const capabilities = capabilitiesResult.rows;
 
     return NextResponse.json({

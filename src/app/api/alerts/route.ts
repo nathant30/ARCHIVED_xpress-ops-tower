@@ -1,8 +1,7 @@
 // /api/alerts - Emergency/SOS Alert Management API
 import { NextRequest } from 'next/server';
-import { 
-  createApiResponse, 
-  createApiError, 
+import {
+  createApiResponse,
   createValidationError,
   parseQueryParams,
   parsePaginationParams,
@@ -21,13 +20,11 @@ export const GET = asyncHandler(async (request: NextRequest) => {
   
   // Get incidents with filters
   const incidents = MockDataService.getIncidents({
-    priority: queryParams.priority,
-    status: queryParams.status,
-    regionId: queryParams.regionId,
-    driverId: queryParams.driverId,
-    incidentType: queryParams.incidentType,
-    createdFrom: queryParams.createdFrom,
-    createdTo: queryParams.createdTo,
+    priority: queryParams.priority as any,
+    status: queryParams.status as any,
+    region: queryParams.regionId as any,
+    dateFrom: queryParams.createdFrom as any,
+    dateTo: queryParams.createdTo as any,
   });
   
   // Apply sorting (most recent first by default, critical incidents prioritized)
@@ -91,22 +88,6 @@ export const GET = asyncHandler(async (request: NextRequest) => {
     };
   });
   
-  // Calculate summary statistics
-  const totalIncidents = incidents.length;
-  const criticalIncidents = incidents.filter(i => i.priority === 'critical').length;
-  const openIncidents = incidents.filter(i => 
-    ['open', 'acknowledged', 'in_progress'].includes(i.status)
-  ).length;
-  const resolvedIncidents = incidents.filter(i => i.status === 'resolved').length;
-  const escalatedIncidents = incidents.filter(i => i.status === 'escalated').length;
-  
-  // Calculate average response time for resolved incidents
-  const resolvedWithTimes = incidents.filter(i => 
-    i.status === 'resolved' && i.firstResponseTime
-  );
-  const avgResponseTime = resolvedWithTimes.length > 0 ? 
-    resolvedWithTimes.reduce((sum, i) => sum + (i.firstResponseTime || 0), 0) / resolvedWithTimes.length : 0;
-  
   return createApiResponse(
     enrichedIncidents,
     'Alerts retrieved successfully'
@@ -127,7 +108,7 @@ export const POST = asyncHandler(async (request: NextRequest) => {
     'description'
   ];
   
-  const validationErrors = validateRequiredFields(body, requiredFields);
+  const validationErrors = validateRequiredFields(body as unknown as Record<string, unknown>, requiredFields);
   
   // Additional validation for SOS alerts
   if (body.priority === 'critical') {
@@ -216,6 +197,8 @@ export const POST = asyncHandler(async (request: NextRequest) => {
   // Create incident with appropriate defaults
   const incidentData = {
     ...body,
+    type: body.incidentType || 'general',
+    reportedBy: body.reporterId || 'system',
     location,
     status: body.priority === 'critical' ? 'open' : 'acknowledged',
     // Auto-acknowledge non-critical incidents
@@ -223,7 +206,7 @@ export const POST = asyncHandler(async (request: NextRequest) => {
     acknowledgedBy: body.priority === 'critical' ? undefined : 'system',
   };
   
-  const newIncident = MockDataService.createIncident(incidentData);
+  const newIncident = MockDataService.createIncident(incidentData as any);
   
   // For critical incidents, trigger immediate notifications
   const notifications = [];

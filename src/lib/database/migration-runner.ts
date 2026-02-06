@@ -733,7 +733,7 @@ export async function runMigrationsCLI(): Promise<void> {
       case 'up':
         const targetVersion = args.find(arg => arg.startsWith('--to='))?.split('=')[1];
         const results = await runner.runMigrations(targetVersion);
-        .length} migrations successfully`);
+        console.log(`Completed ${results.length} migrations successfully`);
         break;
         
       case 'down':
@@ -746,10 +746,13 @@ export async function runMigrationsCLI(): Promise<void> {
         
       case 'status':
         const status = await runner.getMigrationStatus();
+        console.log('Migration Status:', status);
         break;
-        
+
       default:
-        }
+        console.error('Unknown command. Available commands: up, down, status');
+        process.exit(1);
+    }
   } catch (error) {
     console.error('Migration failed:', (error as Error).message);
     process.exit(1);

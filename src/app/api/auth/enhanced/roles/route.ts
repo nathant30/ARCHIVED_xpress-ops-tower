@@ -3,9 +3,8 @@
 
 import { NextRequest } from 'next/server';
 import { withEnhancedAuth, AuthenticatedRequest } from '@/lib/auth/enhanced-auth';
-import { 
-  EnhancedUser, 
-  Role,
+import {
+  EnhancedUser,
   RoleAssignmentRequest
 } from '@/types/rbac-abac';
 import { 
@@ -21,7 +20,7 @@ import { logger } from '@/lib/security/productionLogger';
 export const GET = withEnhancedAuth({
   requiredPermissions: ['manage_users', 'assign_roles'],
   dataClass: 'internal'
-})(async (request: AuthenticatedRequest, user: EnhancedUser) => {
+})(async (_request: AuthenticatedRequest, user: EnhancedUser) => {
   try {
     // Get assignable roles based on user's privilege level
     const userMaxLevel = Math.max(...user.roles.map(r => r.role?.level || 0));
@@ -159,7 +158,7 @@ function validateRoleAssignment(
   const errors = [];
 
   // Validate required fields
-  const requiredErrors = validateRequiredFields(assignment, ['roleIds', 'justification']);
+  const requiredErrors = validateRequiredFields(assignment as unknown as Record<string, unknown>, ['roleIds', 'justification']);
   errors.push(...requiredErrors);
 
   // Validate role IDs

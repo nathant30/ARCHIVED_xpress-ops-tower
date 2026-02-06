@@ -435,8 +435,8 @@ class QueryOptimizer {
     }
 
     // Build service type filter
-    const serviceFilter = serviceTypes.length > 0 ? 
-      `AND JSON_EXTRACT(d.services, '$') LIKE '%${serviceTypes.join('%') || JSON_EXTRACT(d.services, \'$\') LIKE \'%'}%'` : '';
+    const serviceFilter = serviceTypes.length > 0 ?
+      `AND JSON_EXTRACT(d.services, '$') LIKE '%${serviceTypes.join('%')}%'` : '';
 
     const sql = `
       SELECT 

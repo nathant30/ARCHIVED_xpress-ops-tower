@@ -1,21 +1,18 @@
 // /api/admin/approval/requests - List and Filter Approval Requests
 import { NextRequest } from 'next/server';
-import { 
-  createApiResponse, 
+import {
+  createApiResponse,
   createApiError,
   parseQueryParams,
-  parsePaginationParams,
-  asyncHandler,
   handleOptionsRequest
 } from '@/lib/api-utils';
 import { withRBAC, type AuthenticatedRequest } from '@/middleware/rbacMiddleware';
 import { auditLogger, AuditEventType, SecurityLevel } from '@/lib/security/auditLogger';
 import { secureLog } from '@/lib/security/securityUtils';
-import type { 
-  ListApprovalRequestsQuery, 
+import type {
+  ListApprovalRequestsQuery,
   ListApprovalRequestsResponse,
-  ApprovalRequest,
-  ApprovalWorkflow
+  ApprovalRequest
 } from '@/types/approval';
 
 // Mock database functions - replace with actual database queries in production
@@ -209,7 +206,7 @@ export const GET = withRBAC(async (request: AuthenticatedRequest) => {
 
     // Log the approval requests access
     await auditLogger.logEvent(
-      AuditEventType.DATA_ACCESS,
+      AuditEventType.API_CALL,
       SecurityLevel.LOW,
       'SUCCESS',
       { 
@@ -248,7 +245,7 @@ export const GET = withRBAC(async (request: AuthenticatedRequest) => {
     const errorMessage = error instanceof Error ? error.message : 'Failed to retrieve approval requests';
     
     await auditLogger.logEvent(
-      AuditEventType.DATA_ACCESS,
+      AuditEventType.API_CALL,
       SecurityLevel.HIGH,
       'FAILURE',
       { error: errorMessage, resource: 'approval_requests' },
@@ -273,7 +270,9 @@ export const GET = withRBAC(async (request: AuthenticatedRequest) => {
 });
 
 // GET /api/admin/approval/requests/[id] - Get specific approval request by ID
-export const getApprovalRequestById = withRBAC(async (request: AuthenticatedRequest, { params }: { params: { id: string } }) => {
+// NOTE: This function is commented out because it requires dynamic route parameters
+// and should be moved to /api/admin/approval/requests/[id]/route.ts
+/* export const getApprovalRequestById = withRBAC(async (request: AuthenticatedRequest, { params }: { params: { id: string } }) => {
   const user = request.user!;
   const requestId = params.id;
   const clientIP = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
@@ -338,7 +337,7 @@ export const getApprovalRequestById = withRBAC(async (request: AuthenticatedRequ
 
     // Log the access
     await auditLogger.logEvent(
-      AuditEventType.DATA_ACCESS,
+      AuditEventType.API_CALL,
       SecurityLevel.LOW,
       'SUCCESS',
       { resource: 'approval_request', request_id: requestId },
@@ -361,7 +360,7 @@ export const getApprovalRequestById = withRBAC(async (request: AuthenticatedRequ
     const errorMessage = error instanceof Error ? error.message : 'Failed to retrieve approval request';
     
     await auditLogger.logEvent(
-      AuditEventType.DATA_ACCESS,
+      AuditEventType.API_CALL,
       SecurityLevel.HIGH,
       'FAILURE',
       { error: errorMessage, resource: 'approval_request', request_id: requestId },
@@ -383,7 +382,7 @@ export const getApprovalRequestById = withRBAC(async (request: AuthenticatedRequ
   permissions: ['view_pending_approvals', 'view_own_approval_requests', 'approve_requests'],
   requireAll: false,
   minLevel: 10
-});
+}); */
 
 // OPTIONS handler for CORS
 export const OPTIONS = handleOptionsRequest;

@@ -114,7 +114,7 @@ export const POST = asyncHandler(async (request: NextRequest) => {
   
   // Validate required fields
   const requiredFields = ['driverId', 'latitude', 'longitude', 'timestamp'];
-  const validationErrors = validateRequiredFields(body, requiredFields);
+  const validationErrors = validateRequiredFields(body as unknown as Record<string, unknown>, requiredFields);
   
   // Validate coordinates
   if (body.latitude && (body.latitude < -90 || body.latitude > 90)) {

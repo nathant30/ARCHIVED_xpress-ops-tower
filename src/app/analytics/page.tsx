@@ -9,7 +9,6 @@ import {
   Users,
   TrendingUp,
   TrendingDown,
-  Calendar,
   Download,
   RefreshCw,
   Loader2,
@@ -338,7 +337,7 @@ export default function AnalyticsDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100">
-                  {driverPerformance.map((driver, index) => (
+                  {driverPerformance.map((driver) => (
                     <tr key={driver.id} className="hover:bg-neutral-50">
                       <td className="py-3 px-2 text-neutral-600">{driver.id}</td>
                       <td className="py-3 px-2 font-medium text-neutral-900">{driver.name}</td>

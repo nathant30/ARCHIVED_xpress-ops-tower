@@ -132,7 +132,7 @@ export const POST = withAuthAndRateLimit(async (request: NextRequest, user) => {
     'regionId'
   ];
   
-  const validationErrors = validateRequiredFields(body, requiredFields);
+  const validationErrors = validateRequiredFields(body as unknown as Record<string, unknown>, requiredFields);
   
   // Additional validation for delivery services
   if (['send_delivery', 'eats_delivery', 'mart_delivery'].includes(body.serviceType)) {

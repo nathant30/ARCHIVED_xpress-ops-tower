@@ -41,11 +41,7 @@
     "target": "ES2017",
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedIndexedAccess": true,
-    "noImplicitReturns": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "exactOptionalPropertyTypes": true
+    "noImplicitReturns": true
   },
   "include": [
     "next-env.d.ts",

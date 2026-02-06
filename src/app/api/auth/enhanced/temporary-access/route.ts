@@ -3,10 +3,9 @@
 
 import { NextRequest } from 'next/server';
 import { withEnhancedAuth, AuthenticatedRequest } from '@/lib/auth/enhanced-auth';
-import { 
-  EnhancedUser, 
-  TemporaryAccessRequest,
-  TemporaryAccess
+import {
+  EnhancedUser,
+  TemporaryAccessRequest
 } from '@/types/rbac-abac';
 import { 
   createApiResponse, 
@@ -343,13 +342,13 @@ export const DELETE = withEnhancedAuth({
 // Helper Functions
 
 function validateTemporaryAccessRequest(
-  request: TemporaryAccessRequest, 
-  requestingUser: EnhancedUser
+  request: TemporaryAccessRequest,
+  _requestingUser: EnhancedUser
 ): any[] {
   const errors = [];
 
   // Validate required fields
-  const requiredErrors = validateRequiredFields(request, [
+  const requiredErrors = validateRequiredFields(request as unknown as Record<string, unknown>, [
     'permissions', 'escalationType', 'justification', 'expiresAt'
   ]);
   errors.push(...requiredErrors);
@@ -396,7 +395,7 @@ function validateTemporaryAccessRequest(
 
 async function canUserRequestForTarget(
   requestingUser: EnhancedUser, 
-  targetUserId: string
+  _targetUserId: string
 ): Promise<{ allowed: boolean; reason: string }> {
   // Only managers can request access for others
   const isManager = requestingUser.roles.some(r => 
@@ -479,7 +478,7 @@ async function canUserApproveRequest(
   return { allowed: true, reason: 'Approval authorized' };
 }
 
-async function getTemporaryAccessRequests(filters: any, pagination: any): Promise<any[]> {
+async function getTemporaryAccessRequests(_filters: any, _pagination: any): Promise<any[]> {
   // Mock implementation
   return [
     {
@@ -513,7 +512,7 @@ async function createTemporaryAccessRequest(
   };
 }
 
-async function findActiveTemporaryAccess(userId: string, caseId?: string): Promise<any | null> {
+async function findActiveTemporaryAccess(_userId: string, _caseId?: string): Promise<any | null> {
   // Mock implementation
   return null;
 }
@@ -555,15 +554,15 @@ async function revokeTemporaryAccess(requestId: string, revokedBy: string, reaso
 function extractRequestIdFromPath(request: NextRequest): string | null {
   const pathSegments = request.nextUrl.pathname.split('/');
   const tempAccessIndex = pathSegments.indexOf('temporary-access');
-  return tempAccessIndex >= 0 && pathSegments[tempAccessIndex + 1] 
-    ? pathSegments[tempAccessIndex + 1] 
+  return tempAccessIndex >= 0 && pathSegments[tempAccessIndex + 1]
+    ? (pathSegments[tempAccessIndex + 1] ?? null)
     : null;
 }
 
 async function auditTemporaryAccessAction(
-  action: string, 
-  actorId: string, 
-  targetUserId: string, 
+  action: string,
+  actorId: string,
+  targetUserId: string,
   details: any
 ): Promise<void> {
   logger.info(`TEMPORARY_ACCESS_AUDIT: ${action}`, {

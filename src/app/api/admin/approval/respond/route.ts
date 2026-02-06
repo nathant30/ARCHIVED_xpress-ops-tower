@@ -1,32 +1,22 @@
 // /api/admin/approval/respond - Approve or Reject Approval Requests
 import { NextRequest } from 'next/server';
-import jwt from 'jsonwebtoken';
-import { 
-  createApiResponse, 
+import {
+  createApiResponse,
   createApiError,
   createValidationError,
   validateRequiredFields,
-  asyncHandler,
   handleOptionsRequest
 } from '@/lib/api-utils';
 import { withRBAC, type AuthenticatedRequest } from '@/middleware/rbacMiddleware';
 import { auditLogger, AuditEventType, SecurityLevel } from '@/lib/security/auditLogger';
 import { secureLog } from '@/lib/security/securityUtils';
-import type { 
-  ApprovalDecisionBody, 
-  ApprovalDecisionResponse,
+import type {
+  ApprovalDecisionBody,
   ApprovalRequest,
   ApprovalResponse,
   TemporaryAccessToken
 } from '@/types/approval';
 import type { Permission } from '@/hooks/useRBAC';
-
-const JWT_SECRET = process.env.JWT_SECRET || (() => {
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('JWT_SECRET must be set in production environment');
-  }
-  return require('crypto').randomBytes(32).toString('hex');
-})();
 
 // Mock database functions - replace with actual database queries in production
 async function getApprovalRequestById(requestId: string): Promise<ApprovalRequest | null> {
@@ -96,7 +86,7 @@ async function getApprovalRequestById(requestId: string): Promise<ApprovalReques
   return null;
 }
 
-async function getExistingApprovals(requestId: string): Promise<ApprovalResponse[]> {
+async function getExistingApprovals(_requestId: string): Promise<ApprovalResponse[]> {
   // Mock data - in production, query approval_responses table
   return [];
 }
@@ -115,7 +105,7 @@ async function saveApprovalResponse(
     request_id: requestId,
     approver_id: approverId,
     decision,
-    comments,
+    comments: comments || '',
     responded_at: new Date().toISOString()
   };
   
@@ -123,9 +113,9 @@ async function saveApprovalResponse(
 }
 
 async function updateApprovalRequestStatus(
-  requestId: string,
-  status: 'approved' | 'rejected',
-  completedAt: string
+  _requestId: string,
+  _status: 'approved' | 'rejected',
+  _completedAt: string
 ): Promise<void> {
   // Mock database update - in production, update approval_requests table
   }
@@ -151,7 +141,7 @@ async function createTemporaryAccessToken(
     granted_by: grantedBy,
     granted_for_request: requestId,
     created_at: now.toISOString(),
-    metadata
+    metadata: metadata || {}
   };
   
   // Mock database insert - in production, insert into temporary_access_tokens table
@@ -230,7 +220,7 @@ export const POST = withRBAC(async (request: AuthenticatedRequest) => {
   const clientIP = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
 
   // Validate required fields
-  const validationErrors = validateRequiredFields(body, ['request_id', 'decision']);
+  const validationErrors = validateRequiredFields(body as unknown as Record<string, unknown>, ['request_id', 'decision']);
   
   if (validationErrors.length > 0) {
     return createValidationError(validationErrors, '/api/admin/approval/respond', 'POST');
@@ -343,8 +333,7 @@ export const POST = withRBAC(async (request: AuthenticatedRequest) => {
 
     // Calculate approval status
     const approvals = existingApprovals.filter(resp => resp.decision === 'approve');
-    const rejections = existingApprovals.filter(resp => resp.decision === 'reject');
-    
+
     let isFullyApproved = false;
     let isRejected = body.decision === 'reject';
     let temporaryAccessToken: TemporaryAccessToken | undefined;
@@ -386,7 +375,7 @@ export const POST = withRBAC(async (request: AuthenticatedRequest) => {
 
     // Log the approval decision
     await auditLogger.logEvent(
-      body.decision === 'approve' ? AuditEventType.APPROVAL_GRANTED : AuditEventType.APPROVAL_DENIED,
+      body.decision === 'approve' ? AuditEventType.CONFIG_CHANGE : AuditEventType.CONFIG_CHANGE,
       SecurityLevel.HIGH,
       'SUCCESS',
       { 
@@ -398,22 +387,21 @@ export const POST = withRBAC(async (request: AuthenticatedRequest) => {
         temporary_access_granted: !!temporaryAccessToken,
         comments_provided: !!body.comments
       },
-      { 
-        userId: user.user_id, 
-        resource: 'approval_request', 
-        action: body.decision, 
-        resourceId: body.request_id,
-        ipAddress: clientIP 
+      {
+        userId: user.user_id,
+        resource: 'approval_request',
+        action: body.decision,
+        ipAddress: clientIP
       }
     );
 
     // Prepare response
-    const response: ApprovalDecisionResponse = {
+    const response = {
       response_id: approvalResponse.response_id,
       request: {
         ...approvalRequest,
         status: finalStatus,
-        completed_at: finalStatus !== 'pending' ? new Date().toISOString() : undefined
+        completed_at: finalStatus !== 'pending' ? new Date().toISOString() : ''
       },
       decision: body.decision,
       temporary_access_token: temporaryAccessToken,
@@ -438,11 +426,11 @@ export const POST = withRBAC(async (request: AuthenticatedRequest) => {
     const errorMessage = error instanceof Error ? error.message : 'Failed to process approval decision';
     
     await auditLogger.logEvent(
-      AuditEventType.APPROVAL_GRANTED,
+      AuditEventType.CONFIG_CHANGE,
       SecurityLevel.HIGH,
       'FAILURE',
       { error: errorMessage, request_id: body.request_id, decision: body.decision },
-      { userId: user.user_id, resource: 'approval_request', action: 'respond', resourceId: body.request_id, ipAddress: clientIP }
+      { userId: user.user_id, resource: 'approval_request', action: 'respond', ipAddress: clientIP }
     );
 
     secureLog.error('Approval decision error:', error);

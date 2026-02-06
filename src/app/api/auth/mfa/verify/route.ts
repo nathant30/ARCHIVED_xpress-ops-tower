@@ -1,15 +1,13 @@
 // /api/auth/mfa/verify - Enhanced MFA Verification API
 import { NextRequest } from 'next/server';
-import { 
-  createApiResponse, 
+import {
+  createApiResponse,
   createApiError,
   createValidationError,
   validateRequiredFields,
-  asyncHandler,
   handleOptionsRequest
 } from '@/lib/api-utils';
 import { withAuth } from '@/lib/auth';
-import { withRBAC } from '@/middleware/rbacMiddleware';
 import { MockDataService } from '@/lib/mockData';
 import { auditLogger, AuditEventType, SecurityLevel } from '@/lib/security/auditLogger';
 import { logger } from '@/lib/security/productionLogger';
@@ -44,7 +42,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
   const userAgent = request.headers.get('user-agent') || 'unknown';
 
   // Validate required fields
-  const validationErrors = validateRequiredFields(body, ['code']);
+  const validationErrors = validateRequiredFields(body as unknown as Record<string, unknown>, ['code']);
   
   if (validationErrors.length > 0 && !body.backupCode) {
     return createValidationError(validationErrors, '/api/auth/mfa/verify', 'POST');
@@ -102,9 +100,11 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       // Create legacy verification result
       verificationResult = {
         success: verificationSuccess,
-        verifiedAt: verificationSuccess ? new Date() : undefined,
-        errorCode: verificationSuccess ? undefined : 'INVALID_CODE',
-        errorMessage: verificationSuccess ? undefined : 'Invalid MFA code'
+        ...(verificationSuccess && { verifiedAt: new Date() }),
+        ...(!verificationSuccess && {
+          errorCode: 'INVALID_CODE' as const,
+          errorMessage: 'Invalid MFA code'
+        })
       };
     }
 

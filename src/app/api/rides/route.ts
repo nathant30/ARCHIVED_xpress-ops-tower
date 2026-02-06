@@ -248,7 +248,7 @@ export const POST = asyncHandler(async (request: NextRequest) => {
     'regionId'
   ];
   
-  const validationErrors = validateRequiredFields(body, requiredFields);
+  const validationErrors = validateRequiredFields(body as unknown as Record<string, unknown>, requiredFields);
   
   if (validationErrors.length > 0) {
     return createValidationError(validationErrors, '/api/rides', 'POST');

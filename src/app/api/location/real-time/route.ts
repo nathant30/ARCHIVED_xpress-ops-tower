@@ -3,6 +3,9 @@ import { locationIntegrationManager } from '@/lib/realtime/locationIntegrationMa
 import { DriverLocationData } from '@/lib/realtime/realtimeLocationTracker';
 import { logger } from '@/lib/security/productionLogger';
 
+// Force dynamic rendering (skip static generation due to Redis dependency)
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   try {
     await locationIntegrationManager.initialize();

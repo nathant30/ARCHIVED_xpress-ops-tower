@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Brain, Activity, TrendingUp, AlertTriangle, Play, Pause, Settings, BarChart3, Zap, Target, Users, Clock } from 'lucide-react';
+import { Brain, Activity, AlertTriangle, Play, Pause, Settings, BarChart3, Zap, Target } from 'lucide-react';
 
 // AI Management Dashboard
 // Central control panel for all AI/ML systems

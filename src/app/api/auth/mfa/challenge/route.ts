@@ -2,11 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
 import { mfaService, MFAMethod } from '@/lib/auth/mfa-service';
 import { Permission } from '@/hooks/useRBAC';
-import { 
-  createApiResponse, 
+import {
+  createApiResponse,
   createApiError,
-  createValidationError,
-  validateRequiredFields,
   handleOptionsRequest
 } from '@/lib/api-utils';
 
@@ -56,7 +54,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       );
     }
 
-    const { method, action, permission, metadata } = body;
+    const { method, action, permission, metadata: _metadata } = body;
 
     // Get client information for audit
     const clientIP = getClientIP(request);
@@ -80,8 +78,8 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       user.userId,
       method,
       {
-        action,
-        permission,
+        ...(action && { action }),
+        ...(permission && { permission }),
         ipAddress: clientIP,
         userAgent
       }
@@ -123,7 +121,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
  * GET /api/auth/mfa/challenge/status/:challengeId
  * Get status of existing MFA challenge
  */
-async function GET(request: NextRequest): Promise<NextResponse> {
+export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     const url = new URL(request.url);
     const challengeId = url.pathname.split('/').pop();
@@ -205,7 +203,7 @@ function validateChallengeRequest(body: any): { valid: boolean; error?: string }
 function getClientIP(request: NextRequest): string {
   const forwardedFor = request.headers.get('x-forwarded-for');
   if (forwardedFor) {
-    return forwardedFor.split(',')[0].trim();
+    return (forwardedFor.split(',')[0] || 'unknown').trim();
   }
   
   const realIP = request.headers.get('x-real-ip');
@@ -214,7 +212,7 @@ function getClientIP(request: NextRequest): string {
   return 'unknown';
 }
 
-async function checkMFAMethodEnabled(userId: string, method: MFAMethod): Promise<boolean> {
+async function checkMFAMethodEnabled(_userId: string, method: MFAMethod): Promise<boolean> {
   // In production, this would query the database to check user's MFA settings
   // For now, assume all methods are enabled for demonstration
   
@@ -232,7 +230,7 @@ async function checkMFAMethodEnabled(userId: string, method: MFAMethod): Promise
   }
 }
 
-async function getMaskedContactInfo(userId: string, method: MFAMethod): Promise<{
+async function getMaskedContactInfo(_userId: string, method: MFAMethod): Promise<{
   maskedPhone?: string;
   maskedEmail?: string;
 }> {
@@ -254,7 +252,7 @@ async function getMaskedContactInfo(userId: string, method: MFAMethod): Promise<
   }
 }
 
-async function getChallengeStatus(challengeId: string): Promise<{
+async function getChallengeStatus(_challengeId: string): Promise<{
   method: MFAMethod;
   expiresAt: Date;
   attempts: number;

@@ -597,6 +597,29 @@ class LocationIntegrationManager {
   }
 }
 
-// Export singleton instance
-export const locationIntegrationManager = LocationIntegrationManager.getInstance();
+// Lazy singleton getter - only initializes when first accessed (not at module load)
+let _locationIntegrationManagerInstance: LocationIntegrationManager | null = null;
+
+export const locationIntegrationManager = {
+  get instance(): LocationIntegrationManager {
+    if (!_locationIntegrationManagerInstance) {
+      _locationIntegrationManagerInstance = LocationIntegrationManager.getInstance();
+    }
+    return _locationIntegrationManagerInstance;
+  },
+  // Proxy all methods to the lazy instance
+  async initialize() {
+    return this.instance.initialize();
+  },
+  async processLocationUpdate(data: any) {
+    return this.instance.processLocationUpdate(data);
+  },
+  async getLocationAnalytics(timeframe: any) {
+    return this.instance.getLocationAnalytics(timeframe);
+  },
+  async getServiceStatus() {
+    return this.instance.getServiceStatus();
+  }
+};
+
 export default LocationIntegrationManager;

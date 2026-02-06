@@ -73,10 +73,15 @@ export function enforcePIIAccess(request: PIIAccessRequest): PIIAccessResult {
   }
 
   // 🔒 HARDENING: Generate audit ID for tracking
-  const auditId = `PII-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`;
+  const auditId = `PII-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
 
   // Log the access attempt
-  ?.method,
+  const session = getMFASession(userId);
+  console.log('PII Access Attempt:', {
+    userId,
+    action,
+    auditId,
+    mfaMethod: session?.method,
     timestamp: new Date().toISOString()
   });
 

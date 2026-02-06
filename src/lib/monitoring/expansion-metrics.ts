@@ -110,7 +110,13 @@ export function recordExpansionOperation(params: {
 
   // Log security-relevant operations
   if (['promote_region_stage', 'configure_prelaunch_pricing_flagged'].includes(action)) {
-    .toISOString(),
+    console.log('Expansion operation:', {
+      userId,
+      action,
+      regionId,
+      regionState,
+      result,
+      timestamp: new Date().toISOString(),
       metadata
     });
   }
@@ -175,7 +181,13 @@ export function recordExpansionHandover(params: {
     })
     .observe(durationHours);
 
-  .toISOString()
+  console.log('Expansion handover recorded:', {
+    regionId,
+    expansionUserId,
+    targetRole,
+    handoverType,
+    durationHours,
+    timestamp: new Date().toISOString()
   });
 }
 

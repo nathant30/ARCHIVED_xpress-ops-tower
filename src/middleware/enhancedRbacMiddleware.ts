@@ -488,7 +488,6 @@ async function auditSuccessfulAccess(
   }
 ): Promise<void> {
   // In production, this would create comprehensive audit logs
-  `);
 }
 
 async function auditFailedAccess(

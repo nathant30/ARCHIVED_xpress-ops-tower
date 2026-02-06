@@ -238,7 +238,7 @@ export const POST = asyncHandler(async (request: NextRequest) => {
   
   // Validate required fields
   const requiredFields = ['regionId', 'action', 'operatorId', 'reason'];
-  const validationErrors = validateRequiredFields(body, requiredFields);
+  const validationErrors = validateRequiredFields(body as unknown as Record<string, unknown>, requiredFields);
   
   if (body.action === 'activate' || body.action === 'adjust') {
     if (!body.surgeMultiplier || body.surgeMultiplier < 1.0 || body.surgeMultiplier > 5.0) {

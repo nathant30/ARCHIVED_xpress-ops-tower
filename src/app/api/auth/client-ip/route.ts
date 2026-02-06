@@ -38,7 +38,7 @@ export const GET = asyncHandler(async (request: NextRequest) => {
     } else if (forwardedFor) {
       // X-Forwarded-For can contain multiple IPs, take the first one
       const ips = forwardedFor.split(',').map(ip => ip.trim());
-      clientIP = ips[0];
+      clientIP = ips[0] || 'unknown';
     } else if (xClientIP) {
       // X-Client-IP header
       clientIP = xClientIP;
@@ -47,7 +47,7 @@ export const GET = asyncHandler(async (request: NextRequest) => {
     // Basic IP validation and cleaning
     if (clientIP && clientIP !== 'unknown') {
       // Remove any port numbers
-      clientIP = clientIP.split(':')[0];
+      clientIP = clientIP.split(':')[0] || clientIP;
       
       // Basic IPv4 validation (simple check)
       const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
@@ -59,13 +59,13 @@ export const GET = asyncHandler(async (request: NextRequest) => {
       }
     }
 
-    const response: ClientIPResponse = {
+    const response = {
       ip: clientIP,
-      forwardedFor: forwardedFor || undefined,
-      realIP: realIP || undefined,
-      userAgent: userAgent || undefined,
+      ...(forwardedFor && { forwardedFor }),
+      ...(realIP && { realIP }),
+      ...(userAgent && { userAgent }),
       timestamp: new Date().toISOString()
-    };
+    } as ClientIPResponse;
 
     return createApiResponse(
       response,

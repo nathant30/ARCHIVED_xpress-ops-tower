@@ -1,9 +1,8 @@
 // /api/auth/mfa/enable - MFA Setup API
 import { NextRequest } from 'next/server';
-import { 
-  createApiResponse, 
+import {
+  createApiResponse,
   createApiError,
-  asyncHandler,
   handleOptionsRequest
 } from '@/lib/api-utils';
 import { withAuth } from '@/lib/auth';

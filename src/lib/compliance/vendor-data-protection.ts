@@ -176,7 +176,13 @@ export function validateVendorDataAccess(request: {
     .inc();
 
   // Audit log for NPC compliance
-  .toISOString(),
+  console.log('Vendor data access granted:', {
+    user_id: userId,
+    data_category: dataCategory,
+    processing_purpose: processingPurpose,
+    legal_basis: legalBasis,
+    business_justification: businessJustification,
+    timestamp: new Date().toISOString(),
     npc_compliance: true
   });
 
@@ -432,10 +438,12 @@ export function generateNPCComplianceReport(period: { startDate: Date; endDate: 
       'Enhance automated retention enforcement'
     ]
   };
-  
-  .toISOString()
+
+  console.log('NPC compliance report generated:', {
+    period: `${startDate.toISOString()} to ${endDate.toISOString()}`,
+    timestamp: new Date().toISOString()
   });
-  
+
   return report;
 }
 

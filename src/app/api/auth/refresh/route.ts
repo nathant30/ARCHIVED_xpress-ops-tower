@@ -40,7 +40,7 @@ export const POST = asyncHandler(async (request: NextRequest) => {
   const userAgent = request.headers.get('user-agent') || 'unknown';
 
   // Validate required fields
-  const validationErrors = validateRequiredFields(body, ['refreshToken']);
+  const validationErrors = validateRequiredFields(body as unknown as Record<string, unknown>, ['refreshToken']);
   
   if (validationErrors.length > 0) {
     return createValidationError(validationErrors, '/api/auth/refresh', 'POST');

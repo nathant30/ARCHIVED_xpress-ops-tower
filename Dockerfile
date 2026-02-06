@@ -21,6 +21,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 RUN npm run build
 
+# Ensure public directory exists for the copy step
+RUN mkdir -p public
+
 # Production stage
 FROM base AS runner
 WORKDIR /app

@@ -16,9 +16,15 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Accept build arguments for JWT secrets
+ARG JWT_ACCESS_SECRET
+ARG JWT_REFRESH_SECRET
+
 # Build Next.js application
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+ENV JWT_ACCESS_SECRET=$JWT_ACCESS_SECRET
+ENV JWT_REFRESH_SECRET=$JWT_REFRESH_SECRET
 RUN npm run build
 
 # Ensure public directory exists for the copy step

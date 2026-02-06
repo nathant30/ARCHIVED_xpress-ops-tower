@@ -43,8 +43,14 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Build Docker image
+        env:
+          JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
+          JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
         run: |
-          docker build -t xpressops-tower:${{ github.sha }} .
+          docker build \
+            --build-arg JWT_ACCESS_SECRET="${JWT_ACCESS_SECRET}" \
+            --build-arg JWT_REFRESH_SECRET="${JWT_REFRESH_SECRET}" \
+            -t xpressops-tower:${{ github.sha }} .
           docker tag xpressops-tower:${{ github.sha }} xpressops-tower:latest
 
       - name: Login to Amazon ECR
